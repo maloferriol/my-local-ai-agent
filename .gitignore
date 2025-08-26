@@ -1,0 +1,24 @@
+# .gitignore
+.venv/
+*.pyc
+__pycache__/
+
+# Ignore logs
+logs/
+*.log
+
+# Ignore database files (essential!)
+*.db
+
+# Optionally, ignore backup files (if you create them)
+*.bak
+*.sqlite
+
+# Ignore temporary files or build artifacts (if any)
+*.o
+*.exe
+*.pdb
+
+# Ignore IDE specific files
+.idea/
+.vscode/
