@@ -1,14 +1,5 @@
-
-
-
-from rich import box
-from rich.console import Console, Group
-from rich.panel import Panel
-from rich.rule import Rule
-from rich.syntax import Syntax
+from rich.console import Group
 from rich.table import Table
-from rich.text import Text
-from rich.tree import Tree
 
 
 class Formatters:
@@ -29,10 +20,13 @@ class Formatters:
         table.add_column("Arguments")
 
         for name, tool in tools_dict.items():
-            args = [
-                f"{arg_name} (`{info.get('type', 'Any')}`{', optional' if info.get('optional') else ''}): {info.get('description', '')}"
-                for arg_name, info in getattr(tool, "inputs", {}).items()
-            ]
+            args = []
+            for arg_name, info in getattr(tool, "inputs", {}).items():
+                arg_type = info.get("type", "Any")
+                optional = ", optional" if info.get("optional") else ""
+                description = info.get("description", "")
+                arg_str = f"{arg_name} (`{arg_type}`{optional}): {description}"
+                args.append(arg_str)
             table.add_row(name, tool.__doc__, "\n".join(args))
 
         return Group("🛠️ [italic #1E90FF]Tools:[/italic #1E90FF]", table)
