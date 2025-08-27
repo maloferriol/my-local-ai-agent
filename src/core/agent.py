@@ -15,9 +15,15 @@ from tools.examples import get_weather, get_weather_conditions
 from .conversation import ConversationManager
 from cli.formatters import Formatters
 
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
+
+# handler = LoggingHandler(level=logging.INFO, logger_provider=provider)
+# logging.basicConfig(handlers=[handler], level=logging.INFO)
+
+# logging.info("This is an OpenTelemetry log record!")
 
 class Agent:
     """
