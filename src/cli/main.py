@@ -8,9 +8,11 @@ import argparse
 import sys
 import logging
 from core.agent import Agent
+from loggers.logging_config import setup_opentelemetry, get_logger
 
-# Configure logging
-logger = logging.getLogger(__name__)
+# Set up OpenTelemetry logging and get logger
+setup_opentelemetry()
+logger = get_logger(__name__)
 
 
 def create_parser() -> argparse.ArgumentParser:

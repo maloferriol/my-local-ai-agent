@@ -3,13 +3,13 @@ Conversation management module.
 Handles conversation state, history, metadata, and persistence.
 """
 
-import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from models.message import Message
 from models.conversation import Conversation
+from loggers.logging_config import get_logger
 
-conversation_logger = logging.getLogger("conversations_logger")
+conversation_logger = get_logger(__name__)
 
 
 class ConversationManager:

@@ -4,7 +4,6 @@ Manages the agent's behavior,
 tool execution, and coordinates with the conversation manager.
 """
 
-import logging
 from typing import Iterator, Dict, Callable
 from ollama import chat
 from ollama._types import ChatResponse
@@ -14,9 +13,16 @@ from utils.database_utils import DatabaseUtils
 from tools.examples import get_weather, get_weather_conditions
 from .conversation import ConversationManager
 from cli.formatters import Formatters
+from loggers.logging_config import get_logger
 
+<<<<<<< Updated upstream
 # Configure logging
 logger = logging.getLogger(__name__)
+=======
+
+# Get OpenTelemetry-enabled logger
+logger = get_logger(__name__)
+>>>>>>> Stashed changes
 
 
 class Agent:

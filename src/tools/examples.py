@@ -1,8 +1,8 @@
 import random
-import logging
+from loggers.logging_config import get_logger
 
-# Get your logger instance for this module
-logger = logging.getLogger("tools_logger")
+# Get OpenTelemetry-enabled logger instance for this module
+logger = get_logger(__name__)
 
 
 def get_weather(city: str) -> str:

@@ -1,9 +1,9 @@
 import sqlite3
-import logging
 from utils.database_utils import DatabaseUtils
+from loggers.logging_config import get_logger
 
-# Get your logger instance for this module
-logger = logging.getLogger("db_sqlite_logger")
+# Get OpenTelemetry-enabled logger instance for this module
+logger = get_logger(__name__)
 
 default_db_file = "data/conversation_data.db"
 
