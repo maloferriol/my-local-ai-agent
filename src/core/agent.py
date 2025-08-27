@@ -15,14 +15,9 @@ from .conversation import ConversationManager
 from cli.formatters import Formatters
 from loggers.logging_config import get_logger
 
-<<<<<<< Updated upstream
-# Configure logging
-logger = logging.getLogger(__name__)
-=======
 
 # Get OpenTelemetry-enabled logger
 logger = get_logger(__name__)
->>>>>>> Stashed changes
 
 
 class Agent:

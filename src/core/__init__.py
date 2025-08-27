@@ -4,10 +4,6 @@ Core package containing the main AI agent logic and conversation management.
 
 # import logging.config
 
-<<<<<<< Updated upstream
-# Apply the logging configuration
-logging.config.dictConfig(LOGGING_CONFIG)
-=======
 # from loggers.logging_config import LOGGING_CONFIG
 
 from opentelemetry.sdk._logs import LoggerProvider
@@ -23,4 +19,3 @@ set_logger_provider(provider)
 
 # Apply the logging configuration
 # logging.config.dictConfig(LOGGING_CONFIG)
->>>>>>> Stashed changes

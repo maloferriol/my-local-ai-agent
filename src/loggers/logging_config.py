@@ -4,23 +4,22 @@ from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry._logs import set_logger_provider
 
-<<<<<<< Updated upstream
-# Get the path to the project root
-# This ensures log files are created in a consistent location
-project_root = Path(__file__).resolve().parent.parent.parent
-=======
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
+    OTLPLogExporter,
+)
+from opentelemetry.semconv.attributes import service_attributes
+
 
 def setup_opentelemetry():
     """
     Set up OpenTelemetry logging to send logs to the OpenTelemetry collector.
     """
-    # # Create resource with service information
+    # Create resource with service information
     resource = Resource.create(
-        # {
-        #     ResourceAttributes.SERVICE_NAME: "my-local-ai-agent",
-        #     ResourceAttributes.SERVICE_VERSION: "1.0.0",
-        #     ResourceAttributes.DEPLOYMENT_ENVIRONMENT: "development",
-        # }
+        {
+            service_attributes.SERVICE_NAME: "my-local-ai-agent",
+            service_attributes.SERVICE_VERSION: "1.0.0",
+        }
     )
 
     # Set up logging
@@ -52,69 +51,11 @@ def setup_opentelemetry():
 def get_logger(name: str) -> logging.Logger:
     """
     Get a logger configured with OpenTelemetry.
->>>>>>> Stashed changes
 
     Args:
         name: The name of the logger (usually __name__)
 
-<<<<<<< Updated upstream
-LOGGING_CONFIG = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "standard": {"format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"},
-    },
-    "handlers": {
-        "app_file_handler": {
-            "class": "logging.FileHandler",
-            "formatter": "standard",
-            "filename": app_log_path,
-            "level": "DEBUG",
-        },
-        "conversations_file_handler": {
-            "class": "logging.FileHandler",
-            "formatter": "standard",
-            "filename": conversations_log_path,
-            "level": "DEBUG",
-        },
-        "db_sqlite_file_handler": {
-            "class": "logging.FileHandler",
-            "formatter": "standard",
-            "filename": db_sqlite_log_path,
-            "level": "DEBUG",
-        },
-        "tools_file_handler": {
-            "class": "logging.FileHandler",
-            "formatter": "standard",
-            "filename": tools_log_path,
-            "level": "DEBUG",
-        },
-    },
-    "root": {
-        "handlers": ["app_file_handler"],
-        "level": "DEBUG",
-    },
-    "loggers": {
-        "conversations_logger": {
-            "handlers": ["conversations_file_handler"],
-            "level": "DEBUG",
-            "propagate": True,
-        },
-        "db_sqlite_logger": {
-            "handlers": ["db_sqlite_file_handler"],
-            "level": "DEBUG",
-            "propagate": True,
-        },
-        "tools_logger": {
-            "handlers": ["tools_file_handler"],
-            "level": "DEBUG",
-            "propagate": True,
-        },
-    },
-}
-=======
     Returns:
         Configured logger instance
     """
     return logging.getLogger(name)
->>>>>>> Stashed changes
