@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 # logging.info("This is an OpenTelemetry log record!")
 
+
 class Agent:
     """
     Main AI agent class that coordinates the chat interaction, tool execution,

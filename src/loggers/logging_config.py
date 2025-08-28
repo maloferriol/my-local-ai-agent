@@ -1,11 +1,15 @@
 import os
 from pathlib import Path
 
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry._logs import set_logger_provider
+from opentelemetry.sdk.resources import Resource
 
-# from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-# from opentelemetry.sdk._logs.export import BatchLogRecordProcessor, ConsoleLogExporter
-# from opentelemetry._logs import set_logger_provider, get_logger
-
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
+    OTLPLogExporter,
+)
+from opentelemetry.semconv.attributes import service_attributes
 
 # Get the path to the project root
 # This ensures log files are created in a consistent location
@@ -19,11 +23,19 @@ conversations_log_path = log_dir / "conversations.log"
 db_sqlite_log_path = log_dir / "db_sqlite.log"
 tools_log_path = log_dir / "tools.log"
 
-# handler = LoggingHandler(level=logging.INFO, logger_provider=provider)
-# logging.basicConfig(handlers=[handler], level=logging.INFO)
 
-# logging.info("This is an OpenTelemetry log record!")
+resource = Resource.create(
+    {
+        service_attributes.SERVICE_NAME: "my-local-ai-agent",
+        service_attributes.SERVICE_VERSION: "1.0.0",
+    }
+)
 
+# Set up logging
+log_provider = LoggerProvider(resource=resource)
+otlp_log_exporter = OTLPLogExporter(endpoint="http://localhost:4317", insecure=True)
+log_provider.add_log_record_processor(BatchLogRecordProcessor(otlp_log_exporter))
+set_logger_provider(log_provider)
 
 LOGGING_CONFIG = {
     "version": 1,
@@ -32,9 +44,10 @@ LOGGING_CONFIG = {
         "standard": {"format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"},
     },
     "handlers": {
-        "opentelemetry_handler":{
+        "opentelemetry_handler": {
             "class": "opentelemetry.sdk._logs.LoggingHandler",
             "level": "DEBUG",
+            "logger_provider": log_provider,
         },
         "app_file_handler": {
             "class": "logging.FileHandler",
