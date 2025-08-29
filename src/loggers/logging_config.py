@@ -82,17 +82,14 @@ LOGGING_CONFIG = {
         "conversations_logger": {
             "handlers": ["conversations_file_handler"],
             "level": "DEBUG",
-            "propagate": True,
         },
         "db_sqlite_logger": {
             "handlers": ["db_sqlite_file_handler"],
             "level": "DEBUG",
-            "propagate": True,
         },
         "tools_logger": {
             "handlers": ["tools_file_handler"],
             "level": "DEBUG",
-            "propagate": True,
         },
     },
 }

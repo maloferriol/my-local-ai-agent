@@ -11,8 +11,8 @@ receivers:
 
 exporters:
   # Data sources: traces, metrics, logs
-  # file:
-  #   path: ./otel/filename.json
+  file:
+    path: ./logs/filename.json
 
   # file: # the File Exporter, to ingest logs to local file
   #   path: logs/app42_example.log
@@ -22,17 +22,23 @@ exporters:
   debug:
     verbosity: detailed
 
+  otlphttp:
+    endpoint: http://localhost:3100/otlp
+    tls:
+      insecure: true
+
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: []
-      exporters: [debug]
+      exporters: [debug, file]
     metrics:
       receivers: [otlp]
       processors: []
-      exporters: [debug]
+      exporters: [debug, file]
     logs:
       receivers: [otlp]
       processors: []
-      exporters: [debug]
+      exporters: [debug, file, otlphttp]
+

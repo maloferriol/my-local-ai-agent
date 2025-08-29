@@ -4,7 +4,7 @@
 Test script to verify the new separated structure works correctly.
 
 Run:
-python3 -m __tests.test_structure
+    python3 -m tests.test_structure
 """
 
 import sys

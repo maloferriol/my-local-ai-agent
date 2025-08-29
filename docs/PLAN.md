@@ -40,6 +40,7 @@
 1. [done] create a config
 2. [done] create log files
 3. Integrate with OpenTelemetry
+4. Investigate creating a logging stack using Pydantic for schema and Pandas for displaying the data
 
 -------
 ## Draft
