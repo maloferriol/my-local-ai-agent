@@ -186,7 +186,7 @@ class Agent:
 
     def _generate_ai_response(
         self, conversation_messages: list, step: int, conversation_id: int
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, list]:
         """
         Generate an AI response using the Ollama model.
 
@@ -196,7 +196,7 @@ class Agent:
             conversation_id: Database conversation ID
 
         Returns:
-            Tuple of (response_content, thinking)
+            Tuple of (response_content, thinking, tool_calls)
         """
 
         if self.stream:
@@ -210,7 +210,7 @@ class Agent:
 
     def _generate_streaming_response(
         self, conversation_messages: list, step: int, conversation_id: int
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, list]:
         """Generate a streaming response from the AI model."""
         from rich.console import Console
 
@@ -218,6 +218,7 @@ class Agent:
 
         full_response = ""
         thinking = ""
+        tool_calls = []
 
         # Get streaming response
         response_stream: Iterator[ChatResponse] = chat(
@@ -247,19 +248,16 @@ class Agent:
                 console.print(chunk.message.thinking, end="")
                 thinking += chunk.message.thinking
 
+            if chunk.message.tool_calls:
+                tool_calls.extend(chunk.message.tool_calls)
+
         console.print()  # newline after streaming finishes
 
-        # Handle tool calls if any
-        if hasattr(chunk.message, "tool_calls") and chunk.message.tool_calls:
-            self._handle_tool_calls(
-                chunk.message.tool_calls, conversation_messages, step, conversation_id
-            )
-
-        return full_response, thinking
+        return full_response, thinking, tool_calls
 
     def _generate_non_streaming_response(
         self, conversation_messages: list, step: int, conversation_id: int
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, list]:
         """Generate a non-streaming response from the AI model."""
         from rich.console import Console
         from rich.markdown import Markdown
@@ -268,6 +266,7 @@ class Agent:
 
         full_response = ""
         thinking = ""
+        tool_calls = []
 
         # Get non-streaming response
         response: ChatResponse = chat(
@@ -291,16 +290,10 @@ class Agent:
             console.print(Markdown(response.message.thinking), end="")
             thinking = response.message.thinking
 
-        # Handle tool calls if any
         if hasattr(response.message, "tool_calls") and response.message.tool_calls:
-            self._handle_tool_calls(
-                response.message.tool_calls,
-                conversation_messages,
-                step,
-                conversation_id,
-            )
+            tool_calls = response.message.tool_calls
 
-        return full_response, thinking
+        return full_response, thinking, tool_calls
 
     def _handle_tool_calls(
         self, tool_calls, conversation_messages: list, step: int, conversation_id: int
@@ -349,7 +342,7 @@ class Agent:
                 console.print(f"Tool {tool_call.function.name} not found")
 
     def _append_assistant_message_with_thinking(
-        self, messages: list, content: str, thinking: str
+        self, messages: list, content: str, thinking: str, tool_calls: list
     ) -> list:
         """
         Append an assistant message with thinking to the messages list.
@@ -358,11 +351,12 @@ class Agent:
             messages: List of conversation messages
             content: The assistant's response content
             thinking: The assistant's thinking process
+            tool_calls: The tool calls
 
         Returns:
             Updated messages list
         """
-        messages.append({"role": "assistant", "content": content, "thinking": thinking})
+        messages.append({"role": "assistant", "content": content, "thinking": thinking, "tool_calls": tool_calls})
 
         logger.debug("Appended assistant message with thinking: %s", messages[-1])
         return messages
