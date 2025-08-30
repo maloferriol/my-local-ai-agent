@@ -153,27 +153,36 @@ class Agent:
 
         logger.debug("User: %s", user_input)
 
-        # Generate AI response
-        response_content, thinking = self._generate_ai_response(
-            conversation_messages, step, conversation_id
-        )
+        while True:
+            # Generate AI response
+            response_content, thinking, tool_calls = self._generate_ai_response(
+                conversation_messages, step, conversation_id
+            )
 
-        # Store AI response in database
-        self.db_manager.insert_message(
-            conversation_id=conversation_id,
-            step=step,
-            role="assistant",
-            content=response_content,
-            thinking=thinking,
-            model=self.model,
-        )
+            # Store AI response in database
+            self.db_manager.insert_message(
+                conversation_id=conversation_id,
+                step=step,
+                role="assistant",
+                content=response_content,
+                thinking=thinking,
+                model=self.model,
+            )
 
-        # Add AI response to conversation history
-        self._append_assistant_message_with_thinking(
-            conversation_messages, response_content, thinking
-        )
+            # Add AI response to conversation history
+            self._append_assistant_message_with_thinking(
+                conversation_messages, response_content, thinking, tool_calls
+            )
 
-        logger.debug("Conversation length: %d", len(conversation_messages))
+            logger.debug("Conversation length: %d", len(conversation_messages))
+
+            if tool_calls:
+                self._handle_tool_calls(
+                    tool_calls, conversation_messages, step, conversation_id
+                )
+            else:
+                # No more tool calls, break the loop
+                break
 
     def _generate_ai_response(
         self, conversation_messages: list, step: int, conversation_id: int
