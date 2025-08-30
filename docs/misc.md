@@ -14,3 +14,9 @@ git add.
 git commit -m "<example>"
 git push -u origin main                             
 ```
+
+
+Arize docker
+```
+docker run -p 6006:6006 -p 4319:4317 -i -t arizephoenix/phoenix:latest
+```

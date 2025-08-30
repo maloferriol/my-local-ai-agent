@@ -14,25 +14,29 @@ exporters:
   file:
     path: ./logs/filename.json
 
-  # file: # the File Exporter, to ingest logs to local file
-  #   path: logs/app42_example.log
-
   # Data sources: traces, metrics, logs
   # NOTE: Prior to v0.86.0 use `logging` instead of `debug`
   debug:
     verbosity: detailed
 
-  otlphttp:
-    endpoint: http://localhost:3100/otlp
+  otlphttp/logs:
+    endpoint: http://host.docker.internal:3100/otlp
     tls:
       insecure: true
+
+  otlphttp/traces/phoenix:
+    # endpoint: http://host.docker.internal:4319
+    endpoint: http://host.docker.internal:6006
+    tls:
+      insecure: true
+    # protocol: grpc
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: []
-      exporters: [debug, file]
+      exporters: [debug, file, otlphttp/traces/phoenix]
     metrics:
       receivers: [otlp]
       processors: []
@@ -40,5 +44,5 @@ service:
     logs:
       receivers: [otlp]
       processors: []
-      exporters: [debug, file, otlphttp]
+      exporters: [debug, file, otlphttp/logs]
 
