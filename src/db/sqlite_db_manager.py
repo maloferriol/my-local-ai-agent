@@ -2,6 +2,29 @@ import sqlite3
 import logging
 from utils.database_utils import DatabaseUtils
 
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+from opentelemetry.semconv.attributes import service_attributes
+from opentelemetry.sdk.resources import Resource
+
+resource = Resource.create(
+    {
+        service_attributes.SERVICE_NAME: "my-local-ai-agent",
+        service_attributes.SERVICE_VERSION: "1.0.0",
+    }
+)
+
+
+# Set up the OTLP exporter and tracer provider
+trace.set_tracer_provider(TracerProvider(resource=resource))
+otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4317", insecure=True)
+span_processor = BatchSpanProcessor(otlp_exporter)
+trace.get_tracer_provider().add_span_processor(span_processor)
+
+tracer = trace.get_tracer(__name__)
 # Get your logger instance for this module
 logger = logging.getLogger("db_sqlite_logger")
 
@@ -14,6 +37,7 @@ class DatabaseManager:
         self.conn = None  # Connection object
         self.cursor = None  # Cursor object
 
+    @tracer.start_as_current_span("connect_to_db")
     def connect(self):
         try:
             self.conn = sqlite3.connect(self.db_file)
@@ -22,12 +46,14 @@ class DatabaseManager:
         except sqlite3.Error as e:
             logger.error("Error connecting to database: %s", e)
 
+    @tracer.start_as_current_span("close_db_connection")
     def close(self):
         if self.conn:
             self.conn.close()
             self.cursor = None  # Reset cursor to None
             logger.info("Database connection closed: %s", self.db_file)
 
+    @tracer.start_as_current_span("create_table")
     def create_table(self, table_name: str, schema: str):
         """Creates a table with the given schema."""
         try:
@@ -38,6 +64,7 @@ class DatabaseManager:
         except sqlite3.Error as e:
             logger.error("Error creating table %s: %s", table_name, e)
 
+    @tracer.start_as_current_span("execute_query")
     def execute_query(self, query, params=()):
         """Executes a SQL query with optional parameters."""
         logger.debug("Executing query: %s with params: %s", query, params)
@@ -51,6 +78,7 @@ class DatabaseManager:
             logger.error("Error executing query: %s", e)
             return None
 
+    @tracer.start_as_current_span("fetch_all")
     def fetch_all(self, query, params=()):
         """Fetches all rows from a query."""
         try:
@@ -60,6 +88,7 @@ class DatabaseManager:
             logger.error("Error fetching data: %s", e)
             return []
 
+    @tracer.start_as_current_span("create_init_tables")
     def create_init_tables(self):
         try:
             self.create_table(
@@ -90,6 +119,7 @@ class DatabaseManager:
         except Exception as e:
             logger.exception("Error creating initial tables: %s", e)
 
+    @tracer.start_as_current_span("insert_message")
     def insert_message(
         self,
         conversation_id: int,
@@ -139,6 +169,7 @@ class DatabaseManager:
         except sqlite3.Error as e:
             logger.error("Error inserting message: %s", e)
 
+    @tracer.start_as_current_span("get_messages")
     def get_messages(self, conversation_id: int, limit: int = 10):
         """Fetches messages for a specific conversation."""
         try:
@@ -158,6 +189,7 @@ class DatabaseManager:
             )
             return []
 
+    @tracer.start_as_current_span("get_conversations")
     def get_conversations(self, limit: int = 10, offset: int = 0):
         """Fetches conversations with pagination."""
         try:
@@ -169,6 +201,7 @@ class DatabaseManager:
             logger.error("Error fetching conversations with pagination: %s", e)
             return []
 
+    @tracer.start_as_current_span("drop_table")
     def drop_table(self, table_name: str):
         """Drops the specified table."""
         try:
@@ -180,6 +213,7 @@ class DatabaseManager:
         except sqlite3.Error as e:
             logger.error("Error dropping table %s: %s", table_name, e)
 
+    @tracer.start_as_current_span("create_conversation")
     def create_conversation(
         self,
         title: str = "",

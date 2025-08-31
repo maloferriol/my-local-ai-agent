@@ -1,9 +1,0 @@
-[tool.pytest.ini_options]
-# Tell pytest where to look for tests
-testpaths = ["tests"]
-
-# Add "src" to sys.path so imports like "from src.loggers..." work
-pythonpath = ["src"]
-
-# (optional) Make pytest use importlib for imports, avoids sys.path hacks
-addopts = "--import-mode=importlib"

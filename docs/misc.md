@@ -20,3 +20,9 @@ Arize docker
 ```
 docker run -p 6006:6006 -p 4319:4317 -i -t arizephoenix/phoenix:latest
 ```
+
+
+TO run all tests
+```
+python -m unittest tests/test_*      
+```

@@ -15,15 +15,31 @@ from tools.examples import get_weather, get_weather_conditions
 from .conversation import ConversationManager
 from cli.formatters import Formatters
 
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+from opentelemetry.semconv.attributes import service_attributes
+from opentelemetry.sdk.resources import Resource
+
+resource = Resource.create(
+    {
+        service_attributes.SERVICE_NAME: "my-local-ai-agent",
+        service_attributes.SERVICE_VERSION: "1.0.0",
+    }
+)
+
+# Set up the OTLP exporter and tracer provider
+trace.set_tracer_provider(TracerProvider(resource=resource))
+otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4317", insecure=True)
+span_processor = BatchSpanProcessor(otlp_exporter)
+trace.get_tracer_provider().add_span_processor(span_processor)
+
+tracer = trace.get_tracer(__name__)
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-
-# handler = LoggingHandler(level=logging.INFO, logger_provider=provider)
-# logging.basicConfig(handlers=[handler], level=logging.INFO)
-
-# logging.info("This is an OpenTelemetry log record!")
 
 
 class Agent:
@@ -32,6 +48,7 @@ class Agent:
     and conversation management.
     """
 
+    @tracer.start_as_current_span("agent_init")
     def __init__(self, model: str = "gpt-oss:20b", stream: bool = True):
         """
         Initialize the AI agent.
@@ -52,6 +69,7 @@ class Agent:
 
         logger.info("Agent initialized with model: %s, streaming: %s", model, stream)
 
+    @tracer.start_as_current_span("get_available_tools")
     def _get_available_tools(self) -> Dict[str, Callable]:
         """
         Returns a dictionary of available tools.
@@ -68,6 +86,7 @@ class Agent:
         logger.debug("Available tools: %s", list(available_tools.keys()))
         return available_tools
 
+    @tracer.start_as_current_span("display_startup_info")
     def _display_startup_info(self):
         """Display startup information including tools and recent conversations."""
         from rich.console import Console
@@ -112,6 +131,7 @@ class Agent:
                 print("\nExiting.")
                 break
 
+    @tracer.start_as_current_span("_get_user_input")
     def _get_user_input(self) -> str:
         """Get input from the user."""
         from rich.console import Console
@@ -119,10 +139,12 @@ class Agent:
         console = Console()
         return console.input("[bold green]You: ").strip()
 
+    @tracer.start_as_current_span("_should_exit")
     def _should_exit(self, user_input: str) -> bool:
         """Check if the user wants to exit."""
         return user_input.lower() in ("/quit", "/exit", "quit", "exit")
 
+    @tracer.start_as_current_span("_get_conversation_id")
     def _get_conversation_id(self) -> int:
         """Get a new conversation ID."""
 
@@ -131,6 +153,7 @@ class Agent:
         else:
             return self.conversation_manager.get_current_conversation().id
 
+    @tracer.start_as_current_span("_process_user_input")
     def _process_user_input(self, user_input: str, conversation_messages: list):
         """Process a single user input and generate a response."""
         step = len(conversation_messages) + 1
@@ -184,6 +207,7 @@ class Agent:
                 # No more tool calls, break the loop
                 break
 
+    @tracer.start_as_current_span("_generate_ai_response")
     def _generate_ai_response(
         self, conversation_messages: list, step: int, conversation_id: int
     ) -> tuple[str, str, list]:
@@ -208,6 +232,7 @@ class Agent:
                 conversation_messages, step, conversation_id
             )
 
+    @tracer.start_as_current_span("_generate_streaming_response")
     def _generate_streaming_response(
         self, conversation_messages: list, step: int, conversation_id: int
     ) -> tuple[str, str, list]:
@@ -255,6 +280,7 @@ class Agent:
 
         return full_response, thinking, tool_calls
 
+    @tracer.start_as_current_span("_generate_non_streaming_response")
     def _generate_non_streaming_response(
         self, conversation_messages: list, step: int, conversation_id: int
     ) -> tuple[str, str, list]:
@@ -295,6 +321,7 @@ class Agent:
 
         return full_response, thinking, tool_calls
 
+    @tracer.start_as_current_span("_handle_tool_calls")
     def _handle_tool_calls(
         self, tool_calls, conversation_messages: list, step: int, conversation_id: int
     ):
@@ -341,6 +368,7 @@ class Agent:
             else:
                 console.print(f"Tool {tool_call.function.name} not found")
 
+    @tracer.start_as_current_span("_append_assistant_message_with_thinking")
     def _append_assistant_message_with_thinking(
         self, messages: list, content: str, thinking: str, tool_calls: list
     ) -> list:
@@ -356,7 +384,14 @@ class Agent:
         Returns:
             Updated messages list
         """
-        messages.append({"role": "assistant", "content": content, "thinking": thinking, "tool_calls": tool_calls})
+        messages.append(
+            {
+                "role": "assistant",
+                "content": content,
+                "thinking": thinking,
+                "tool_calls": tool_calls,
+            }
+        )
 
         logger.debug("Appended assistant message with thinking: %s", messages[-1])
         return messages
