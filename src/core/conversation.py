@@ -6,7 +6,7 @@ Handles conversation state, history, metadata, and persistence.
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from models.message import Message
+from models.message import ChatMessage
 from models.conversation import Conversation
 
 conversation_logger = logging.getLogger("conversations_logger")
@@ -64,7 +64,7 @@ class ConversationManager:
         )
         return conversation_id
 
-    def add_user_message(self, content: str, model: str = None) -> Message:
+    def add_user_message(self, content: str, model: str = None) -> ChatMessage:
         """
         Add a user message to the current conversation.
 
@@ -80,7 +80,7 @@ class ConversationManager:
                 "No active conversation. Call start_new_conversation() first."
             )
 
-        message = Message(
+        message = ChatMessage(
             role="user", content=content, timestamp=datetime.now(), model=model
         )
 
@@ -105,7 +105,7 @@ class ConversationManager:
 
     def add_assistant_message(
         self, content: str, thinking: str = None, model: str = None
-    ) -> Message:
+    ) -> ChatMessage:
         """
         Add an assistant message to the current conversation.
 
@@ -122,7 +122,7 @@ class ConversationManager:
                 "No active conversation. Call start_new_conversation() first."
             )
 
-        message = Message(
+        message = ChatMessage(
             role="assistant",
             content=content,
             timestamp=datetime.now(),
@@ -152,7 +152,7 @@ class ConversationManager:
 
     def add_tool_message(
         self, content: str, tool_name: str, model: str = None
-    ) -> Message:
+    ) -> ChatMessage:
         """
         Add a tool message to the current conversation.
 
@@ -169,7 +169,7 @@ class ConversationManager:
                 "No active conversation. Call start_new_conversation() first."
             )
 
-        message = Message(
+        message = ChatMessage(
             role="tool",
             content=content,
             timestamp=datetime.now(),
@@ -245,7 +245,7 @@ class ConversationManager:
         # Load messages
         messages_data = self.db_manager.get_conversation_messages(conversation_id)
         for msg_data in messages_data:
-            message = Message(
+            message = ChatMessage(
                 role=msg_data["role"],
                 content=msg_data["content"],
                 timestamp=msg_data.get("timestamp", datetime.now()),

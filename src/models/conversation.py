@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from dataclasses import dataclass, asdict
-from models.message import Message
+from models.message import ChatMessage
 
 
 @dataclass
@@ -14,18 +14,18 @@ class Conversation:
     title: Optional[str] = None
     model: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
-    messages: List[Message] = None
+    messages: List[ChatMessage] = None
 
     def __post_init__(self):
         if self.messages is None:
             self.messages = []
 
-    def add_message(self, message: Message):
+    def add_message(self, message: ChatMessage):
         """Add a message to the conversation."""
         self.messages.append(message)
         self.updated_at = datetime.now()
 
-    def get_last_message(self) -> Optional[Message]:
+    def get_last_message(self) -> Optional[ChatMessage]:
         """Get the last message in the conversation."""
         return self.messages[-1] if self.messages else None
 

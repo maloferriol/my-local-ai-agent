@@ -156,15 +156,14 @@ class Agent:
         user_message = {"role": "user", "content": user_input}
         conversation_messages.append(user_message)
 
-        # Store user message in database
-        self.db_manager.insert_message(
+
+        # Store user message in database (generic)
+        self._store_message_in_db(
             conversation_id=conversation_id,
             step=step,
             role="user",
             content=user_input,
-            model=self.model,
         )
-
         current_span = trace.get_current_span()
         current_span.set_attribute("llm.input_messages", user_message)
 
@@ -176,15 +175,23 @@ class Agent:
                 conversation_messages, step, conversation_id
             )
 
-            # Store AI response in database
-            self.db_manager.insert_message(
+
+            # Store AI response in database (generic)
+            self._store_message_in_db(
                 conversation_id=conversation_id,
                 step=step,
                 role="assistant",
                 content=response_content,
                 thinking=thinking,
-                model=self.model,
+                tool_calls=str(tool_calls) if tool_calls else "",
             )
+            current_span = trace.get_current_span()
+            current_span.set_attribute("llm.output_messages", {
+                "role": "assistant",
+                "content": response_content,
+                "thinking": thinking,
+                "tool_calls": tool_calls,
+            })
 
             # Add AI response to conversation history
             self._append_assistant_message_with_thinking(
@@ -245,6 +252,18 @@ class Agent:
         thinking = ""
         tool_calls = []
 
+        current_span = trace.get_current_span()
+
+        # Set model and streaming attributes
+        current_span.set_attribute("llm.streaming", True)
+        current_span.set_attribute("llm.model_name", self.model)
+        current_span.set_attribute("llm.system", "ollama")
+
+        # Flatten input messages as per OpenInference conventions
+        for i, obj in enumerate(conversation_messages):
+            for key, value in obj.items():
+                current_span.set_attribute(f"llm.input_messages.{i}.message.{key}", value)
+
         # Get streaming response
         response_stream: Iterator[ChatResponse] = self.client.chat(
             model=self.model,
@@ -277,6 +296,31 @@ class Agent:
                 tool_calls.extend(chunk.message.tool_calls)
 
         console.print()  # newline after streaming finishes
+
+        # Output message flattening as per OpenInference conventions
+        current_span.set_attribute(f"llm.output_messages.{step}.message.role", "assistant")
+        current_span.set_attribute(f"llm.output_messages.{step}.message.content", full_response)
+        if thinking:
+            current_span.set_attribute(f"llm.output_messages.{step}.message.thinking", thinking)
+        if tool_calls:
+            for j, tool_call in enumerate(tool_calls):
+                # If tool_call has id, function, arguments, etc., flatten as per conventions
+                if hasattr(tool_call, "id"):
+                    current_span.set_attribute(f"llm.output_messages.{step}.message.tool_calls.{j}.tool_call.id", getattr(tool_call, "id", ""))
+                if hasattr(tool_call, "function") and hasattr(tool_call.function, "name"):
+                    current_span.set_attribute(f"llm.output_messages.{step}.message.tool_calls.{j}.tool_call.function.name", getattr(tool_call.function, "name", ""))
+                if hasattr(tool_call, "function") and hasattr(tool_call.function, "arguments"):
+                    current_span.set_attribute(f"llm.output_messages.{step}.message.tool_calls.{j}.tool_call.function.arguments", str(getattr(tool_call.function, "arguments", "")))
+
+        # Also set a summary output message
+        current_span.set_attribute("llm.output_messages", {
+            "role": "assistant",
+            "content": full_response,
+            "thinking": thinking,
+            "tool_calls": tool_calls,
+        })
+
+        # Optionally, trace token counts, costs, or other details if available (not present in this code)
 
         return full_response, thinking, tool_calls
 
@@ -347,11 +391,6 @@ class Agent:
                     end="\n",
                 )
 
-                current_span.set_attribute(
-                    "llm.function_call", 
-                    f'{{"function_name": "{tool_call.function.name}", "args": "{tool_call.function.arguments}"}}',
-                )
-
                 try:
                     result = function_to_call(**tool_call.function.arguments)
                     console.print("[bold cyan]Tool result:", end="")
@@ -366,26 +405,69 @@ class Agent:
                         }
                     )
 
-                    # Store tool result in database
-                    self.db_manager.insert_message(
+
+                    # Store tool result in database (generic)
+                    self._store_message_in_db(
                         conversation_id=conversation_id,
                         step=step,
                         role="tool",
                         content=result,
                         tool_name=tool_call.function.name,
-                        model=self.model,
+                        tool_results=str(result),
                     )
-
                     current_span.set_attribute(
                         "llm.function_call", 
                         f'{{"function_name": "{tool_call.function.name}", "args": "{tool_call.function.arguments}"}}',
                     )
-
+                    current_span.set_attribute("llm.tool_result", str(result))
+                    current_span.set_attribute("llm.tool_name", tool_call.function.name)
                 except Exception as e:
                     logger.error(f"Error executing tool {tool_call.function.name}: {e}")
                     console.print(f"[bold red]Tool execution error: {e}")
             else:
                 console.print(f"Tool {tool_call.function.name} not found")
+
+    @tracer.start_as_current_span(
+        name="_store_message_in_db",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
+    def _store_message_in_db(
+        self,
+        conversation_id: int,
+        step: int,
+        role: str,
+        content: str,
+        thinking: str = "",
+        tool_calls: str = "",
+        tool_results: str = "",
+        tool_name: str = ""
+    ) -> None:
+        """
+        Store any message in the database with tracing.
+        """
+        self.db_manager.insert_message(
+            conversation_id,
+            step,
+            role,
+            content,
+            thinking,
+            tool_calls,
+            tool_results,
+            self.model,
+            tool_name,
+        )
+        current_span = trace.get_current_span()
+        # Trace all message data
+        current_span.set_attribute("llm.message.role", role)
+        current_span.set_attribute("llm.message.content", content)
+        if thinking:
+            current_span.set_attribute("llm.message.thinking", thinking)
+        if tool_calls:
+            current_span.set_attribute("llm.message.tool_calls", tool_calls)
+        if tool_results:
+            current_span.set_attribute("llm.message.tool_results", tool_results)
+        if tool_name:
+            current_span.set_attribute("llm.message.tool_name", tool_name)
 
     @tracer.start_as_current_span(
         name="_append_assistant_message_with_thinking",

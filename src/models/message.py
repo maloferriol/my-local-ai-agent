@@ -4,7 +4,7 @@ from dataclasses import dataclass, asdict
 
 
 @dataclass
-class Message:
+class ChatMessage:
     """Represents a single message in a conversation."""
 
     role: str

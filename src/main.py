@@ -20,6 +20,6 @@ if __name__ == "__main__":
 else:
     # When imported as a module, provide access to the main components
     from core.agent import Agent
-    from core.conversation import ConversationManager, Conversation, Message
+    from core.conversation import ConversationManager, Conversation, ChatMessage
 
-    __all__ = ["Agent", "ConversationManager", "Conversation", "Message"]
+    __all__ = ["Agent", "ConversationManager", "Conversation", "ChatMessage"]

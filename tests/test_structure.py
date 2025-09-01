@@ -27,7 +27,7 @@ def test_imports():
         # Test core modules
         #
         from core.agent import Agent
-        from core.conversation import ConversationManager, Conversation, Message
+        from core.conversation import ConversationManager, Conversation, ChatMessage
 
         print("✓ Core modules imported successfully")
 
