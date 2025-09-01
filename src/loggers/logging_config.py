@@ -11,6 +11,13 @@ from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
 )
 from opentelemetry.semconv.attributes import service_attributes
 
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+
+
 # Get the path to the project root
 # This ensures log files are created in a consistent location
 project_root = Path(__file__).resolve().parent.parent.parent
@@ -36,6 +43,14 @@ log_provider = LoggerProvider(resource=resource)
 otlp_log_exporter = OTLPLogExporter(endpoint="http://localhost:4317", insecure=True)
 log_provider.add_log_record_processor(BatchLogRecordProcessor(otlp_log_exporter))
 set_logger_provider(log_provider)
+
+
+# Set up the OTLP exporter and tracer provider
+trace.set_tracer_provider(TracerProvider(resource=resource))
+otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4317", insecure=True)
+span_processor = BatchSpanProcessor(otlp_exporter)
+trace.get_tracer_provider().add_span_processor(span_processor)
+
 
 LOGGING_CONFIG = {
     "version": 1,

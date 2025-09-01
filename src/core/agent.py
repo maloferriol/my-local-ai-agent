@@ -6,7 +6,7 @@ tool execution, and coordinates with the conversation manager.
 
 import logging
 from typing import Iterator, Dict, Callable
-from ollama import chat
+from ollama import Client
 from ollama._types import ChatResponse
 
 from db.sqlite_db_manager import DatabaseManager
@@ -14,32 +14,17 @@ from utils.database_utils import DatabaseUtils
 from tools.examples import get_weather, get_weather_conditions
 from .conversation import ConversationManager
 from cli.formatters import Formatters
-
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-from opentelemetry.semconv.attributes import service_attributes
-from opentelemetry.sdk.resources import Resource
+from openinference.semconv.trace import SpanAttributes
 
-resource = Resource.create(
-    {
-        service_attributes.SERVICE_NAME: "my-local-ai-agent",
-        service_attributes.SERVICE_VERSION: "1.0.0",
-    }
-)
-
-# Set up the OTLP exporter and tracer provider
-trace.set_tracer_provider(TracerProvider(resource=resource))
-otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4317", insecure=True)
-span_processor = BatchSpanProcessor(otlp_exporter)
-trace.get_tracer_provider().add_span_processor(span_processor)
 
 tracer = trace.get_tracer(__name__)
-
-# Configure logging
 logger = logging.getLogger(__name__)
+
+# example query: Can you please give me the weather condition and temperatur in Rome
+# TODO: fix the step logged in the messages table, it should increment with each message
+# I think that there should step and another field. Step should be the message number in the
 
 
 class Agent:
@@ -48,7 +33,6 @@ class Agent:
     and conversation management.
     """
 
-    @tracer.start_as_current_span("agent_init")
     def __init__(self, model: str = "gpt-oss:20b", stream: bool = True):
         """
         Initialize the AI agent.
@@ -66,10 +50,14 @@ class Agent:
         # Initialize database
         self.db_manager.connect()
         self.db_manager.create_init_tables()
+        
+        self.client = Client(
+            # Ollama Turbo
+            # host="https://ollama.com", headers={'Authorization': (os.getenv('OLLAMA_API_KEY'))}
+        )
 
         logger.info("Agent initialized with model: %s, streaming: %s", model, stream)
 
-    @tracer.start_as_current_span("get_available_tools")
     def _get_available_tools(self) -> Dict[str, Callable]:
         """
         Returns a dictionary of available tools.
@@ -86,7 +74,6 @@ class Agent:
         logger.debug("Available tools: %s", list(available_tools.keys()))
         return available_tools
 
-    @tracer.start_as_current_span("display_startup_info")
     def _display_startup_info(self):
         """Display startup information including tools and recent conversations."""
         from rich.console import Console
@@ -131,7 +118,6 @@ class Agent:
                 print("\nExiting.")
                 break
 
-    @tracer.start_as_current_span("_get_user_input")
     def _get_user_input(self) -> str:
         """Get input from the user."""
         from rich.console import Console
@@ -139,12 +125,14 @@ class Agent:
         console = Console()
         return console.input("[bold green]You: ").strip()
 
-    @tracer.start_as_current_span("_should_exit")
     def _should_exit(self, user_input: str) -> bool:
         """Check if the user wants to exit."""
         return user_input.lower() in ("/quit", "/exit", "quit", "exit")
 
-    @tracer.start_as_current_span("_get_conversation_id")
+    @tracer.start_as_current_span(
+        name="_get_conversation_id",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def _get_conversation_id(self) -> int:
         """Get a new conversation ID."""
 
@@ -153,7 +141,10 @@ class Agent:
         else:
             return self.conversation_manager.get_current_conversation().id
 
-    @tracer.start_as_current_span("_process_user_input")
+    @tracer.start_as_current_span(
+        name="_process_user_input",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def _process_user_input(self, user_input: str, conversation_messages: list):
         """Process a single user input and generate a response."""
         step = len(conversation_messages) + 1
@@ -173,6 +164,9 @@ class Agent:
             content=user_input,
             model=self.model,
         )
+
+        current_span = trace.get_current_span()
+        current_span.set_attribute("llm.input_messages", user_message)
 
         logger.debug("User: %s", user_input)
 
@@ -207,7 +201,10 @@ class Agent:
                 # No more tool calls, break the loop
                 break
 
-    @tracer.start_as_current_span("_generate_ai_response")
+    @tracer.start_as_current_span(
+        name="_generate_ai_response",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def _generate_ai_response(
         self, conversation_messages: list, step: int, conversation_id: int
     ) -> tuple[str, str, list]:
@@ -232,7 +229,10 @@ class Agent:
                 conversation_messages, step, conversation_id
             )
 
-    @tracer.start_as_current_span("_generate_streaming_response")
+    @tracer.start_as_current_span(
+        name="_generate_streaming_response",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "LLM"},
+    )
     def _generate_streaming_response(
         self, conversation_messages: list, step: int, conversation_id: int
     ) -> tuple[str, str, list]:
@@ -246,7 +246,7 @@ class Agent:
         tool_calls = []
 
         # Get streaming response
-        response_stream: Iterator[ChatResponse] = chat(
+        response_stream: Iterator[ChatResponse] = self.client.chat(
             model=self.model,
             messages=conversation_messages,
             stream=True,
@@ -261,7 +261,7 @@ class Agent:
         for chunk in response_stream:
             if chunk.message.content:
                 if not first_printed_response:
-                    console.print("[bold yellow]\nAssistant: ", end="")
+                    console.print("[bold bright_blue]\nAssistant: ", end="")
                     first_printed_response = True
                 print(chunk.message.content, end="")
                 full_response += chunk.message.content
@@ -280,7 +280,10 @@ class Agent:
 
         return full_response, thinking, tool_calls
 
-    @tracer.start_as_current_span("_generate_non_streaming_response")
+    @tracer.start_as_current_span(
+        name="_generate_non_streaming_response",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "LLM"},
+    )
     def _generate_non_streaming_response(
         self, conversation_messages: list, step: int, conversation_id: int
     ) -> tuple[str, str, list]:
@@ -295,13 +298,13 @@ class Agent:
         tool_calls = []
 
         # Get non-streaming response
-        response: ChatResponse = chat(
+        response: ChatResponse = self.client.chat(
             model=self.model, messages=conversation_messages, stream=False, think="low"
         )
 
         # Process response content
         if response.message.content:
-            console.print("[bold yellow]\nAssistant:", end="\n")
+            console.print("[bold bright_blue]\nAssistant:", end="\n")
 
             console.print(Markdown(response.message.content), end="")
             full_response = response.message.content
@@ -321,7 +324,10 @@ class Agent:
 
         return full_response, thinking, tool_calls
 
-    @tracer.start_as_current_span("_handle_tool_calls")
+    @tracer.start_as_current_span(
+        name="_handle_tool_calls",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def _handle_tool_calls(
         self, tool_calls, conversation_messages: list, step: int, conversation_id: int
     ):
@@ -329,19 +335,27 @@ class Agent:
         from rich.console import Console
 
         console = Console()
+        current_span = trace.get_current_span()
 
         for tool_call in tool_calls:
             function_to_call = self.available_tools.get(tool_call.function.name)
             if function_to_call:
                 console.print(
-                    f"Calling tool: {tool_call.function.name}, "
-                    f"with arguments: {tool_call.function.arguments}",
-                    end="",
+                    "[bold cyan]Calling tool:",
+                    f"{tool_call.function.name}, " "[bold cyan]with arguments: ",
+                    f"{tool_call.function.arguments}",
+                    end="\n",
+                )
+
+                current_span.set_attribute(
+                    "llm.function_call", 
+                    f'{{"function_name": "{tool_call.function.name}", "args": "{tool_call.function.arguments}"}}',
                 )
 
                 try:
                     result = function_to_call(**tool_call.function.arguments)
-                    console.print("[bold magenta]Tool result:" + "{result}")
+                    console.print("[bold cyan]Tool result:", end="")
+                    console.print(result, end="\n")
 
                     # Add tool result to conversation
                     conversation_messages.append(
@@ -362,13 +376,21 @@ class Agent:
                         model=self.model,
                     )
 
+                    current_span.set_attribute(
+                        "llm.function_call", 
+                        f'{{"function_name": "{tool_call.function.name}", "args": "{tool_call.function.arguments}"}}',
+                    )
+
                 except Exception as e:
                     logger.error(f"Error executing tool {tool_call.function.name}: {e}")
                     console.print(f"[bold red]Tool execution error: {e}")
             else:
                 console.print(f"Tool {tool_call.function.name} not found")
 
-    @tracer.start_as_current_span("_append_assistant_message_with_thinking")
+    @tracer.start_as_current_span(
+        name="_append_assistant_message_with_thinking",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def _append_assistant_message_with_thinking(
         self, messages: list, content: str, thinking: str, tool_calls: list
     ) -> list:
@@ -384,14 +406,18 @@ class Agent:
         Returns:
             Updated messages list
         """
+        current_span = trace.get_current_span()
+        message= {
+            "role": "assistant",
+            "content": content,
+            "thinking": thinking,
+            "tool_calls": tool_calls,
+        }
         messages.append(
-            {
-                "role": "assistant",
-                "content": content,
-                "thinking": thinking,
-                "tool_calls": tool_calls,
-            }
+            message
         )
+
+        current_span.set_attribute("llm.output_messages", message)
 
         logger.debug("Appended assistant message with thinking: %s", messages[-1])
         return messages
