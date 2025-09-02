@@ -47,4 +47,15 @@
 
 1. Create Tool class
 2. create tool registry
-3. 
+
+
+Add LakeFS to maintaint the Knowledge DATA 
+Then use that during eval and inference to keep track of the version of the data. 
+
+Then Enable tracking of data in Evals 
+
+It will allow for comparison of the data between 2 runs 
+
+Also integrate with a vector database
+
+Create a Chat UI as it's quit annoying 
