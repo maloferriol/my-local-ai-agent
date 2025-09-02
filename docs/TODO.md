@@ -18,6 +18,7 @@
 
 1. Create a tool to search the web
    1. maybe use mcp server for that
+2. Add citation
 
 ## Workflow Local Database
 
