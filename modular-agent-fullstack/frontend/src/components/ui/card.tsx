@@ -2,12 +2,17 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+interface CardProps extends React.ComponentProps<"div"> {
+  fullWidth?: boolean;
+}
+
+function Card({ className, fullWidth, ...props }: CardProps) {
   return (
     <div
       data-slot="card"
       className={cn(
         "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm",
+        fullWidth && "w-full", // Conditionally apply w-full
         className
       )}
       {...props}
