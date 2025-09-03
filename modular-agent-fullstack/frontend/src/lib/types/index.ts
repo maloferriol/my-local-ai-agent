@@ -1,21 +1,27 @@
-export type HumanMessage = {
-  type: "human";
-  id?: string | undefined;
-  content: string;
-};
+export enum RoleType {
+  User = 'user',
+  Assistant = 'assistant',
+  Tool = 'tool',
+  System = 'system',
+}
 
-export type AIMessage = {
-  type: "ai";
-  id?: string | undefined;
-  content: string;
-};
+export interface Conversation {
+  id: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+  title?: string | null;
+  model?: string | null;
+  metadata?: Record<string, any> | null;
+  messages?: ChatMessage[];
+}
 
-export type Message =
-  | HumanMessage
-  | AIMessage
-
-
-export type UserQuery = {
-    messages: Message[];
-    extra_info: Record<string, any>;
-};
+export interface ChatMessage {
+  id: string;
+  role: RoleType;
+  content?: string | null;
+  timestamp?: string | null;
+  thinking?: string | null;
+  tool_name?: string | null;
+  model?: string | null;
+  metadata?: Record<string, any> | null;
+}

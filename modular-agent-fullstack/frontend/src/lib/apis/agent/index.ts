@@ -1,7 +1,7 @@
-import { UserQuery } from "@/lib/types";
+import { Conversation } from "@/lib/types";
 
 // this is used to fetch the data
-export const getAgentResponse = async (query: UserQuery, agentURL: string) => {
+export const getAgentResponse = async (query: Conversation, agentURL: string) => {
   try{
     const res = await fetch(`/backend/${agentURL}`, {
       method: "POST",

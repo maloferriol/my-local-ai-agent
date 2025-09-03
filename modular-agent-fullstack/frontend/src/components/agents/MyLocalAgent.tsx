@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Cpu, Zap, Ghost, NotebookTabs, Binoculars, Waypoints, Bolt } from "lucide-react";
+import { Cpu, Ghost, NotebookTabs, Binoculars, Waypoints, Bolt } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // interface of the params
@@ -18,8 +18,8 @@ interface ModeSelectorParams {
   setMode: (value: string) => void;
 }
 
-// this func is used as the state used in the RAG Agent
-const ragAgentState = () => {
+// this hook is used as the state used in the RAG Agent
+const useRagAgentState = () => {
   const [model, setModel] = useState("gpt-oss:20b");
   const [mode, setMode] = useState("default");
   return { model, setModel, mode, setMode };
@@ -91,7 +91,16 @@ const ModeSelector = ({ mode, setMode }: ModeSelectorParams) => {
 };
 
 // event info list
-const eventInfo = (data: any) => {
+interface StreamEventData {
+  stage: string;
+  metadata?: unknown;
+  tool?: string;
+  result?: string;
+  error?: string;
+  response?: string;
+}
+
+const eventInfo = (data: StreamEventData) => {
   let titleDetails: string = "";
   let extraInfo;
   // decide the stage
@@ -101,7 +110,7 @@ const eventInfo = (data: any) => {
       extraInfo = "Composing and presenting the final answer.";
       break;
     case "rag_search":
-      const chunks = data.extra_info || [];
+      const chunks = Array.isArray(data.metadata) ? data.metadata : [];
       const numChunks = chunks.length;
       titleDetails = "Search Knowledge Base Using RAG";
       extraInfo = `Gathered ${numChunks} chunks from RAG Database.`;
@@ -114,6 +123,14 @@ const eventInfo = (data: any) => {
       titleDetails = "LLM Thinking";
       extraInfo = "The LLM is processing the input and generating a response...";
       break;
+    case "tool_result":
+      titleDetails = `Tool: ${data.tool}`;
+      extraInfo = `Executed with result: ${data.result}`;
+      break;
+    case "tool_error":
+      titleDetails = `Tool Error: ${data.tool}`;
+      extraInfo = `Error: ${data.error}`;
+      break;
   }
   return { titleDetails, extraInfo }; 
 }; 
@@ -121,18 +138,20 @@ const eventInfo = (data: any) => {
 const getQueryExtraInfo = ({ model, mode }: ExtraInfoParams) => {
   const reasoning_model = model;
   const rag_mode = mode;
+  console.log('reasoning_model', reasoning_model);
+  console.log('rag_mode', rag_mode);
   return { reasoning_model, rag_mode };
 };
 
 // build the fields of the agent content
-const MyLocalAgentFields = ({ onReady }) => {
-  const { model, setModel, mode, setMode } = ragAgentState();
-  useEffect(() => {    
+const MyLocalAgentFields = ({ onReady }: { onReady: (extraInfo: { reasoning_model: string; rag_mode: string }, eventInfoFunc: (data: StreamEventData) => { titleDetails: string; extraInfo: unknown }, agentURL: string) => void }) => {
+  const { model, setModel, mode, setMode } = useRagAgentState();
+  useEffect(() => {
     const extraInfo = getQueryExtraInfo({ model, mode });
     const eventInfoFunc = eventInfo;
     const agentURL = "my_local_agent/invoke";
     onReady(extraInfo, eventInfoFunc, agentURL);
-  }, [ model, mode]);
+  }, [ model, mode ]);
   return (
     <>
       <div className="flex flex-row gap-2 bg-neutral-700 border-neutral-600 text-neutral-300 focus:ring-neutral-500 rounded-xl rounded-t-sm pl-2  max-w-[100%] sm:max-w-[90%]">
