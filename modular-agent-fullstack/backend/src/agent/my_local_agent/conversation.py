@@ -3,11 +3,13 @@ Conversation management module.
 Handles conversation state, history, metadata, and persistence.
 """
 
+import json
 import logging
+
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from .models import Conversation, ChatMessage
+from .models import Conversation, ChatMessage, Role
 
 
 conversation_logger = logging.getLogger("conversations_logger")
@@ -82,7 +84,7 @@ class ConversationManager:
             )
 
         message = ChatMessage(
-            role="user", content=content, timestamp=datetime.now(), model=model
+            role=Role.USER, content=content, timestamp=datetime.now(), model=model
         )
 
         # Add to current conversation
@@ -93,7 +95,7 @@ class ConversationManager:
         self.db_manager.insert_message(
             conversation_id=self.current_conversation.id,
             step=step,
-            role="user",
+            role=Role.USER.value,
             content=content,
             model=model,
         )
@@ -105,7 +107,11 @@ class ConversationManager:
         return message
 
     def add_assistant_message(
-        self, content: str, thinking: str = None, model: str = None
+        self,
+        content: str,
+        thinking: str = None,
+        model: str = None,
+        tool_calls: List[Dict] = None,
     ) -> ChatMessage:
         """
         Add an assistant message to the current conversation.
@@ -114,6 +120,7 @@ class ConversationManager:
             content: The message content
             thinking: The assistant's thinking process
             model: The AI model being used
+            tool_calls: A list of tool calls made by the assistant
 
         Returns:
             The created message object
@@ -124,11 +131,12 @@ class ConversationManager:
             )
 
         message = ChatMessage(
-            role="assistant",
+            role=Role.ASSISTANT,
             content=content,
             timestamp=datetime.now(),
             thinking=thinking,
             model=model,
+            tool_calls=tool_calls,
         )
 
         # Add to current conversation
@@ -139,9 +147,10 @@ class ConversationManager:
         self.db_manager.insert_message(
             conversation_id=self.current_conversation.id,
             step=step,
-            role="assistant",
+            role=Role.ASSISTANT.value,
             content=content,
             thinking=thinking,
+            tool_calls=json.dumps(tool_calls) if tool_calls else "",
             model=model,
         )
 
@@ -172,6 +181,7 @@ class ConversationManager:
 
         message = ChatMessage(
             role="tool",
+            role=Role.TOOL,
             content=content,
             timestamp=datetime.now(),
             tool_name=tool_name,
@@ -186,7 +196,7 @@ class ConversationManager:
         self.db_manager.insert_message(
             conversation_id=self.current_conversation.id,
             step=step,
-            role="tool",
+            role=Role.TOOL.value,
             content=content,
             tool_name=tool_name,
             model=model,
@@ -236,24 +246,29 @@ class ConversationManager:
         # Create conversation object
         conversation = Conversation(
             id=conversation_id,
-            created_at=conversation_data.get("created_at", datetime.now()),
-            updated_at=conversation_data.get("updated_at", datetime.now()),
+            created_at=conversation_data.get("timestamp"),
+            updated_at=conversation_data.get("timestamp"),
             title=conversation_data.get("title"),
-            model=conversation_data.get("model"),
-            metadata=conversation_data.get("metadata", {}),
         )
 
         # Load messages
-        messages_data = self.db_manager.get_conversation_messages(conversation_id)
+        messages_data = self.db_manager.get_messages(conversation_id)
         for msg_data in messages_data:
+            tool_calls = None
+            if msg_data.get("tool_calls"):
+                try:
+                    tool_calls = json.loads(msg_data["tool_calls"])
+                except json.JSONDecodeError:
+                    conversation_logger.warning("Could not decode tool_calls JSON.")
             message = ChatMessage(
-                role=msg_data["role"],
+                id=str(msg_data["id"]),
+                role=Role(msg_data["role"]),
                 content=msg_data["content"],
                 timestamp=msg_data.get("timestamp", datetime.now()),
                 thinking=msg_data.get("thinking"),
+                tool_calls=tool_calls,
                 tool_name=msg_data.get("tool_name"),
                 model=msg_data.get("model"),
-                metadata=msg_data.get("metadata", {}),
             )
             conversation.messages.append(message)
 
