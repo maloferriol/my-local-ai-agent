@@ -7,7 +7,7 @@ from enum import Enum
 # Define the Enum first
 class Role(Enum):
     USER = 'user'
-    ASSISTANT = 'asssitant'
+    ASSISTANT = 'assistant'
     SYSTEM = 'system'
     TOOL = 'tool'
 
@@ -15,18 +15,23 @@ class Role(Enum):
 @dataclass
 class ChatMessage:
     """Represents a single message in a conversation."""
-    id: str
+    id: int
     role: Role
     content: str
     timestamp: Optional[datetime] = None
     thinking: Optional[str] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
     tool_name: Optional[str] = None
     model: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert message to dictionary format."""
-        return asdict(self)
+        data = asdict(self)
+        if isinstance(data.get("role"), Enum):
+            data["role"] = data["role"].value
+        # Filter out None values for cleaner API payloads
+        return {k: v for k, v in data.items() if v is not None}
 
 @dataclass
 class Conversation:
@@ -58,4 +63,7 @@ class Conversation:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert conversation to dictionary format."""
-        return asdict(self)
+        conv_dict = asdict(self)
+        if self.messages:
+            conv_dict["messages"] = [m.to_dict() for m in self.messages]
+        return conv_dict
