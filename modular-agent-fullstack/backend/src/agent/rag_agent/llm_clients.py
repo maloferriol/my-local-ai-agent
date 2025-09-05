@@ -1,4 +1,5 @@
-""" this module is used to define the llm clients, include OpenAI-based and Ollama based """
+"""this module is used to define the llm clients, include OpenAI-based and Ollama based"""
+
 import json
 import os
 
@@ -9,6 +10,7 @@ from openai import AsyncOpenAI
 # get the logger
 logger = structlog.get_logger()
 
+
 class LLMClient:
     def __init__(self):
         # define the ollama and openai client
@@ -16,12 +18,14 @@ class LLMClient:
         self.openai_client = AsyncOpenAI()
 
     async def _ollama_gen(self, payload, model="gemma3:4b"):
-        """ generate the response from ollama """
+        """generate the response from ollama"""
         try:
-            res = await self.ollama_client.chat(model=model, messages=payload, stream=True)
+            res = await self.ollama_client.chat(
+                model=model, messages=payload, stream=True
+            )
             async for event in res:
                 if not event["done"]:
-                    # Here is the token output for the thinking steps 
+                    # Here is the token output for the thinking steps
                     yield event["message"]["thinking"]
                     # Here is the token output for the final answer
                     yield event["message"]["content"]
@@ -30,8 +34,10 @@ class LLMClient:
 
     async def _openai_gen(self, payload, model="chatgpt-4o-latest"):
         try:
-            """ generate the response from openai """
-            res = await self.openai_client.responses.create(model=model, input=payload, stream=True)
+            """generate the response from openai"""
+            res = await self.openai_client.responses.create(
+                model=model, input=payload, stream=True
+            )
             async for event in res:
                 _event = json.loads(event.to_json())
                 if "delta" in _event:
@@ -40,7 +46,7 @@ class LLMClient:
             logger.error("openai client has error: ", error=e)
 
     def generate(self, payload, model):
-        """ this func is used to generate the response """
+        """this func is used to generate the response"""
         if model == "chatgpt-4o-latest":
             return self._openai_gen(payload, model)
         else:

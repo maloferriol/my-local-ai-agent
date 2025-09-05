@@ -36,19 +36,23 @@ from src.agent.gemini_agent.utils import (
 
 load_dotenv()
 
+
 class ExtraInfo(BaseModel):
     initial_search_query_count: int
     reasoning_model: str
     max_research_loops: int
+
 
 class Message(BaseModel):
     type: str
     content: str
     id: str
 
+
 class UserQuery(BaseModel):
     messages: List[Message]
     extra_info: ExtraInfo
+
 
 if os.getenv("GEMINI_API_KEY") is None:
     raise ValueError("GEMINI_API_KEY is not set")
@@ -57,6 +61,7 @@ if os.getenv("GEMINI_API_KEY") is None:
 genai_client = Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = FastAPI()
+
 
 # Nodes
 def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerationState:
@@ -320,6 +325,7 @@ def build_langchain_message(messages):
             langchain_messages.append(AIMessage(content=message.content))
     return langchain_messages
 
+
 # start to build the endpoint
 @app.post("/invoke")
 async def invoke(query: UserQuery):
@@ -331,10 +337,13 @@ async def invoke(query: UserQuery):
         "max_research_loops": query.extra_info.max_research_loops,
         "reasoning_model": query.extra_info.reasoning_model,
     }
+
     # stream the output
     async def stream():
         finalize_answer_done = False
-        async for mode, chunk in graph.astream(state, stream_mode=["updates", "messages"]):
+        async for mode, chunk in graph.astream(
+            state, stream_mode=["updates", "messages"]
+        ):
             content, extra_info = "", None
             if mode == "messages":
                 # only do the operation when the current node is not finalize the answer
@@ -353,4 +362,5 @@ async def invoke(query: UserQuery):
             # finalize the response
             res = {"stage": stage, "response": content, "extra_info": extra_info}
             yield json.dumps(res) + "\n"
+
     return StreamingResponse(stream())

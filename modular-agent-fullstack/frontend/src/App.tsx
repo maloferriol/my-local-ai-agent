@@ -1,10 +1,11 @@
 import type { ChatMessage } from "@/lib/types";
 import {RoleType}  from "@/lib/types";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { ProcessedEvent } from "@/components/ActivityTimeline";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { ChatMessagesView } from "@/components/ChatMessagesView";
-import { getAgentResponse } from "@/lib/apis/agent";
+import { getAgentResponse, getConversation } from "@/lib/apis/agent";
 import { Conversation } from "@/lib/types";
 import { useSelectedAgent } from "@/hooks/useSelectedAgent";
 
@@ -12,9 +13,7 @@ export default function App() {
   const [processedEventsTimeline, setProcessedEventsTimeline] = useState<
     ProcessedEvent[]
   >([]);
-  const [historicalActivities, setHistoricalActivities] = useState<
-    Record<string, ProcessedEvent[]>
-  >({});
+  const [historicalActivities, setHistoricalActivities] = useState<Record<string, ProcessedEvent[]>>({});
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const hasFinalizeEventOccurredRef = useRef(false);
   const [chats, setChats] = useState<ChatMessage[]>([]);
@@ -24,6 +23,30 @@ export default function App() {
   const [isThinking, setIsThinking] = useState<boolean>(false);
   // select agent states
   const { selectedAgent, setSelectedAgent } = useSelectedAgent();
+  const { conversationId } = useParams<{ conversationId: string }>();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchConversation = async () => {
+      if (conversationId) {
+        console.log("Fetching conversation with ID:", conversationId)
+        setIsLoading(true);
+        console.log("parseInt parseInt parseInt Fetching conversation with ID:", parseInt(conversationId, 10));
+        const conversation = await getConversation(parseInt(conversationId, 10), `agent/my_local_agent`);
+        console.log("Fetched conversation:", conversation)
+        if (conversation) {
+          setChats(conversation.messages);
+        } else {
+          // Handle case where conversation is not found
+          console.error("Conversation not found");
+          // maybe redirect to home page
+          navigate('/', { replace: true });
+        }
+        setIsLoading(false);
+      }
+    };
+    fetchConversation();
+  }, [conversationId, navigate]);
 
   useEffect(() => {
     chatsRef.current = chats;
@@ -57,6 +80,9 @@ export default function App() {
 
   const handleSubmit = useCallback(
     (submittedInputValue: string, agentURL: string, eventInfo: (data: any) => any, queryExtraInfo: any) => {
+
+      // I didn't accept this change as I don't understand why we would need this isLoading check
+      // if (!submittedInputValue.trim() || isLoading) return;
       if (!submittedInputValue.trim()) return;
       setProcessedEventsTimeline([]);
       // Reset thinking state for new request
@@ -96,6 +122,11 @@ export default function App() {
             for (const line of lines) {
               if (line !== ""){
                 const data = JSON.parse(line);
+
+                if (data.stage === 'metadata' && data.conversation_id && !conversationId) {
+                  navigate(`/c/${data.conversation_id}`, { replace: true });
+                }
+
                 const { titleDetails, extraInfo } = eventInfo(data);
                 processedEvent = {
                   title: titleDetails,
@@ -203,11 +234,11 @@ export default function App() {
       
       // execute the func
       getAnswer({
-        id: Date.now(),
+        id: conversationId ? parseInt(conversationId, 10) : 0,
         messages: newMessages,
         // metadata: queryExtraInfo,
       });
-    }, []
+    }, [isLoading, conversationId, navigate]
   );
 
   const handleCancel = useCallback(() => {
@@ -218,9 +249,7 @@ export default function App() {
     <div className="flex h-screen bg-neutral-800 text-neutral-100 font-sans antialiased">
       <main className="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full">
         <div
-          className={`flex-1 overflow-y-auto ${
-            chats.length === 0 ? "flex" : ""
-          }`}
+          className={`flex-1 overflow-y-auto ${chats.length === 0 ? "flex" : ""}`}
         >
           {chats.length === 0 ? (
             <WelcomeScreen

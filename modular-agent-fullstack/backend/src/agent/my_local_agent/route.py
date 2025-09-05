@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 import os
 from typing import Any, AsyncGenerator, Dict, List
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from ollama import AsyncClient
 from openinference.semconv.trace import SpanAttributes
@@ -14,10 +14,12 @@ from opentelemetry import trace
 from rich import print
 
 from .conversation import ConversationManager
-from .db import DatabaseManager
+from .db import DatabaseManager, DatabaseUtils
 from .examples import get_weather, get_weather_conditions
 from .logging_config import LOGGING_CONFIG
 from .models import ChatMessage, Conversation, Role
+import traceback
+
 
 # Configure logging
 logging.config.dictConfig(LOGGING_CONFIG)
@@ -30,6 +32,10 @@ tracer = trace.get_tracer(__name__)
 db_manager = DatabaseManager()
 
 
+def print_trace(ex: BaseException):
+    print("".join(traceback.TracebackException.from_exception(ex).format()))
+
+
 # Initialize Ollama client
 try:
     ollama_client = AsyncClient(host=os.environ["OLLAMA_URL"])
@@ -38,25 +44,20 @@ except Exception as e:
     logger.error(f"Failed to initialize Ollama client: {e}")
     raise
 
-# need to migrate this to lifespan
-# The method "on_event" in class "FastAPI" is deprecated
-# on_event is deprecated, use lifespan event handlers instead.
-@app.on_event("startup")
-async def startup_event():
-    """Connect to the database on startup."""
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage database connection lifecycle."""
+    print("Initializing database connection...")
     db_manager.connect()
     db_manager.create_init_tables()
     logger.info("Database connected and tables created.")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Close the database connection on shutdown."""
+    yield
     db_manager.close()
     logger.info("Database connection closed.")
 
 
-app = FastAPI(on_startup=[startup_event], on_shutdown=[shutdown_event])
+app = FastAPI(lifespan=lifespan)
 
 available_tools_default = {
     "get_weather": get_weather,
@@ -64,12 +65,41 @@ available_tools_default = {
 }
 
 
+@app.get("/conversation/{conversation_id}", response_model=Conversation)
+async def get_conversation(conversation_id: int):
+    """
+    Fetch a conversation by its ID.
+
+    Args:
+        conversation_id: The ID of the conversation to fetch.
+
+    Returns:
+        The conversation object.
+    """
+    if db_manager.conn is None:
+        db_manager.connect()
+        db_manager.create_init_tables()
+
+    conv_manager = ConversationManager(db_manager)
+    try:
+        # The load_conversation method returns a Conversation object or None
+        conversation = conv_manager.load_conversation(conversation_id)
+        if conversation:
+            # The response_model will handle the serialization
+            return conversation
+        else:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+    except Exception as e:
+        logger.error(f"Error fetching conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @tracer.start_as_current_span(
     name="_stream_model_response",
     attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "LLM"},
 )
 async def _stream_model_response(
-    messages: List[ChatMessage],
+    messages: List[Dict[str, Any]],
     model: str,
     think: str | None,
     tools: List[Dict] | None,
@@ -89,21 +119,33 @@ async def _stream_model_response(
         A dictionary representing a single event from
         the stream (e.g., 'thinking', 'content', 'tool_call').
     """
-    current_span = trace.get_current_span()
-    current_span.set_attribute("llm.model_name", model)
-    current_span.set_attribute(
-        "llm.invocation_parameters",
-        json.dumps(
-            {
-                "model": model,
-                "think": think,
-                "stream": True,
-            }
-        ),
-    )
-    current_span.set_attribute("llm.input_messages", json.dumps(messages))
+    try:
+        current_span = trace.get_current_span()
+        current_span.set_attribute("llm.model_name", model)
+        current_span.set_attribute(
+            "llm.invocation_parameters",
+            json.dumps(
+                {
+                    "model": model,
+                    "think": think,
+                    "stream": True,
+                }
+            ),
+        )
+
+        current_span.set_attribute("llm.input_messages", messages)
+    except Exception as e:
+        logger.error(
+            f"Tracing LLM invocation parameters error: {e}",
+            exc_info=True,
+        )
+        print(
+            f"Tracing LLM invocation parameters error: {e}",
+            exc_info=True,
+        )
 
     try:
+        print("messages", messages)
         response_stream = await ollama_client.chat(
             model=model,
             messages=messages,
@@ -129,23 +171,27 @@ async def _stream_model_response(
 
             if tool_calls := msg.get("tool_calls"):
                 for tool_call in tool_calls:
+                    print("tool_call", tool_call)
                     tool_call_chunks.append(tool_call)
                     yield {"stage": "tool_call_chunk", "tool_call": tool_call}
 
-        output_message = {
-            "role": "assistant",
-            "content": "".join(content_chunks),
-            "tool_calls": tool_call_chunks if tool_call_chunks else None
-        }
+        # output_message = {
+        #     "role": "assistant",
+        #     "content": "".join(content_chunks),
+        #     "tool_calls": tool_call_chunks if tool_call_chunks else None
+        # }
 
-        current_span.set_attribute("llm.output_messages", json.dumps([output_message]))
+        # current_span.set_attribute("llm.output_messages", json.dumps([output_message]))
         if thinking_chunks:
             current_span.set_attribute("llm.thinking", "".join(thinking_chunks))
 
     except Exception as e:
         print(f"FAIL Ollama client chat error: {e}")
+
+        print_trace(e)
         logger.error(f"Ollama client chat error: {e}")
         yield {"stage": "error", "response": f"Model communication error: {str(e)}"}
+        raise
 
 
 @tracer.start_as_current_span(
@@ -154,22 +200,15 @@ async def _stream_model_response(
 )
 async def _execute_tools(
     tool_calls: List[Dict[str, Any]],
-    messages: List[Dict[str, Any]],
-    conversation_id: int,
-    model: str,
     conv_manager: ConversationManager,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Executes a list of tool calls and yields their results.
 
-    This function also appends the tool results to the messages list for the
-    next iteration of the conversation.
+    This function uses the ConversationManager to persist tool results.
 
     Args:
         tool_calls: A list of tool calls received from the model.
-        messages: The conversation history, which will be mutated with tool results.
-        conversation_id: The ID of the current conversation for persistence.
-        model: The model being used, for persistence.
         conv_manager: The conversation manager instance.
 
     Yields:
@@ -208,7 +247,7 @@ async def _execute_tools(
                         tool_name=tool_name,
                         model=conv_manager.get_current_conversation().model,
                     )
-                    
+
                     # Yield the result to the client
                     yield {
                         "stage": "tool_result",
@@ -217,14 +256,6 @@ async def _execute_tools(
                         "result": result,
                     }
 
-                    # Append the successful tool result for the model's context
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "content": result,
-                            "tool_name": tool_name,
-                        }
-                    )
                 except Exception as e:
                     tool_span.record_exception(e)
                     tool_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
@@ -251,9 +282,7 @@ async def _execute_tools(
     attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
 )
 async def _stream_chat_with_tools_refactored(
-    messages: List[ChatMessage], 
-    conversation_id: int,
-    model: str, 
+    model: str,
     conv_manager: ConversationManager,
 ):
     """
@@ -275,6 +304,13 @@ async def _stream_chat_with_tools_refactored(
     print(f"Starting chat stream with model: {model}, tools: {tools_count}")
     logger.info(f"Starting chat stream with model: {model}")
 
+    yield json.dumps(
+        {
+            "stage": "metadata",
+            "conversation_id": conv_manager.get_current_conversation().id,
+        }
+    ) + "\n"
+
     count = 0
     while True:
         count += 1
@@ -284,45 +320,54 @@ async def _stream_chat_with_tools_refactored(
             full_thinking: List[str] = []
             full_content: List[str] = []
 
-            messages_for_llm = [m.to_dict() for m in conv_manager.get_current_conversation().messages]
+            messages_for_llm = [
+                m.to_dict() for m in conv_manager.get_current_conversation().messages
+            ]
             # === Part 1: Stream model response and collect tool calls ===
             streamer = _stream_model_response(
-                messages_for_llm, 
-                model, 
-                thinking_effort, 
+                messages_for_llm,
+                model,
+                thinking_effort,
                 available_tools,
             )
-            async for chunk in streamer:
-                stage = chunk.get("stage")
-                if stage == "thinking":
-                    full_thinking.append(chunk["response"])
-                elif stage == "content":
-                    full_content.append(chunk["response"])
-                elif stage == "tool_call_chunk":
-                    tool_calls_this_turn.append(chunk["tool_call"])
-
-                yield json.dumps(chunk) + "\n"
+            try:
+                async for chunk in streamer:
+                    stage = chunk.get("stage")
+                    if stage == "thinking":
+                        full_thinking.append(chunk["response"])
+                        yield json.dumps(chunk) + "\n"
+                    elif stage == "content":
+                        full_content.append(chunk["response"])
+                        yield json.dumps(chunk) + "\n"
+                    elif stage == "tool_call_chunk":
+                        tool_calls_this_turn.append(chunk["tool_call"])
+            except Exception as e:
+                print_trace(e)
+                print(f"FAIL Error in chat loop iteration: {e}")
+                raise
 
             assistant_content = "".join(full_content)
-            assistant_message = conv_manager.add_assistant_message(
-                content=assistant_content,
-                thinking="".join(full_thinking),
-                model=model,
-                tool_calls=json.dumps(tool_calls_this_turn) if tool_calls_this_turn else None,                
-            )
+            assistant_thinking_content = "".join(full_thinking)
 
-            # The ConversationManager has already appended the message to its internal state.
+            conv_manager.add_assistant_message(
+                content=assistant_content,
+                thinking=assistant_thinking_content,
+                model=model,
+            )
 
             # === Part 2: Check for tool calls and execute them ===
             if not tool_calls_this_turn:
                 yield json.dumps({"stage": "finalize_answer"}) + "\n"
                 break  # No tools to call, so we're done.
 
+            print("HEEERRRRRRREEEEEE I AM")
+
             print(f"Executing {len(tool_calls_this_turn)} tool call(s)")
             # We have tools to call, so execute them and stream results.
-            # The `messages_for_llm` used by _execute_tools is just for legacy reasons and not used for state.
-            tool_executor = _execute_tools(
-                tool_calls_this_turn, messages_for_llm, conversation_id, model, conv_manager
+            tool_executor = _execute_tools(tool_calls_this_turn, conv_manager)
+
+            print(
+                "HEEERRRRRRREEEEEE I AM =============================================================="
             )
 
             async for tool_result in tool_executor:
@@ -330,6 +375,8 @@ async def _stream_chat_with_tools_refactored(
 
             # Loop continues to the next turn with the updated messages list...
         except Exception as e:
+            print_trace(e)
+            print("line 333")
             print(f"FAIL Error in chat loop iteration: {e}")
             logger.error(f"Error in chat loop iteration: {e}")
             error_response = {
@@ -337,9 +384,15 @@ async def _stream_chat_with_tools_refactored(
                 "response": f"Chat loop error: {str(e)}",
             }
             yield json.dumps(error_response) + "\n"
+            raise
             break  # Exit the loop on critical error
 
 
+# The input can be a Conversation but the id shouldn't be mandatory
+# from the frontend when creating a new conversation, it could be an object Conversation, but I ain'st sure
+# maybe just send the message or a conversation Step
+# then the backend creates a Conversation object and we then use that and pass the conversation id to the UI
+# then frontend use that in URL
 @app.post("/invoke")
 @tracer.start_as_current_span(
     name="invoke",
@@ -355,17 +408,33 @@ async def invoke(query: Conversation):
     Returns:
         StreamingResponse containing chat responses and tool execution results
     """
-    logger.info("Received chat")
-    msg_count = len(query.messages) if query.messages else 0
-    print(f"Received chat request with {msg_count} messages")
+    try:
+        logger.info("Received chat")
+        print("Received chat", query)
 
-    current_span = trace.get_current_span()
-    current_span.set_attribute(
-        "llm.input_messages", json.dumps([msg.to_dict() for msg in query.messages])
-    )
+        msg_count = len(query.messages) if query.messages else 0
+        print(f"Received chat request with {msg_count} messages")
+
+        current_span = trace.get_current_span()
+        current_span.set_attribute(
+            "llm.input_messages", json.dumps([msg.to_dict() for msg in query.messages])
+        )
+    
+    except Exception as e:
+        print_trace(e)
+        print("Error e:", e)
+
+    if db_manager.conn is None:
+        db_manager.connect()
+        db_manager.create_init_tables()
 
     conv_manager = ConversationManager(db_manager)
-    conversation_id = query.id
+    if conv_manager.current_conversation:
+        conversation_id = conv_manager.current_conversation.id
+        if conversation_id == 0:
+            conversation_id = None
+    else:
+        conversation_id = None
 
     user_message = query.messages[-1] if query.messages else None
 
@@ -373,20 +442,22 @@ async def invoke(query: Conversation):
         # Handle case with no messages
         error_response = {"stage": "error", "response": "Query contains no messages."}
         return StreamingResponse(
-            iter([json.dumps(error_response) + "\n"]), media_type="text/plain"
+            iter([json.dumps(error_response) + "\n"]),
+            media_type="text/plain",
         )
 
-    model = user_message.model or "gpt-oss:20b"
+    model = user_message.model or "gpt-oss:20b"  # Default model
     current_span.set_attribute("llm.model_name", model)
-    if not conversation_id:
-        # ISSUE HERE !!!!
+    if not conversation_id or conversation_id == 0:
         # Generate a title from the first message if possible
+        title = DatabaseUtils.generate_random_name(3)
+        conversation_id = conv_manager.start_new_conversation(title=title, model=model)
+        # Send conversation ID at the beginning of the stream
+        print(f"[ROUTE] Created new conversation with ID: {conversation_id}")
         logger.info(f"Created new conversation with ID: {conversation_id}")
-        query.id = conversation_id  # Update the query object
     else:
         # Load existing conversation. If it doesn't exist, this will be handled.
         conv_manager.load_conversation(conversation_id)
-
 
     # Add the new user message to the conversation state
     if user_message.role == Role.USER:
@@ -400,6 +471,7 @@ async def invoke(query: Conversation):
             media_type="text/plain",
         )
     except Exception as e:
+        print_trace(e)
         print(f"FAIL StreamingResponse creation error: {e}")
         logger.error(f"Failed to create StreamingResponse: {e}")
         # Return error response
