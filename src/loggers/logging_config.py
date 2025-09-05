@@ -17,7 +17,6 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 
-
 # Get the path to the project root
 # This ensures log files are created in a consistent location
 project_root = Path(__file__).resolve().parent.parent.parent

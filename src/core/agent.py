@@ -50,7 +50,7 @@ class Agent:
         # Initialize database
         self.db_manager.connect()
         self.db_manager.create_init_tables()
-        
+
         self.client = Client(
             # Ollama Turbo
             # host="https://ollama.com", headers={'Authorization': (os.getenv('OLLAMA_API_KEY'))}
@@ -156,7 +156,6 @@ class Agent:
         user_message = {"role": "user", "content": user_input}
         conversation_messages.append(user_message)
 
-
         # Store user message in database (generic)
         self._store_message_in_db(
             conversation_id=conversation_id,
@@ -175,7 +174,6 @@ class Agent:
                 conversation_messages, step, conversation_id
             )
 
-
             # Store AI response in database (generic)
             self._store_message_in_db(
                 conversation_id=conversation_id,
@@ -186,12 +184,15 @@ class Agent:
                 tool_calls=str(tool_calls) if tool_calls else "",
             )
             current_span = trace.get_current_span()
-            current_span.set_attribute("llm.output_messages", {
-                "role": "assistant",
-                "content": response_content,
-                "thinking": thinking,
-                "tool_calls": tool_calls,
-            })
+            current_span.set_attribute(
+                "llm.output_messages",
+                {
+                    "role": "assistant",
+                    "content": response_content,
+                    "thinking": thinking,
+                    "tool_calls": tool_calls,
+                },
+            )
 
             # Add AI response to conversation history
             self._append_assistant_message_with_thinking(
@@ -262,7 +263,9 @@ class Agent:
         # Flatten input messages as per OpenInference conventions
         for i, obj in enumerate(conversation_messages):
             for key, value in obj.items():
-                current_span.set_attribute(f"llm.input_messages.{i}.message.{key}", value)
+                current_span.set_attribute(
+                    f"llm.input_messages.{i}.message.{key}", value
+                )
 
         # Get streaming response
         response_stream: Iterator[ChatResponse] = self.client.chat(
@@ -298,27 +301,49 @@ class Agent:
         console.print()  # newline after streaming finishes
 
         # Output message flattening as per OpenInference conventions
-        current_span.set_attribute(f"llm.output_messages.{step}.message.role", "assistant")
-        current_span.set_attribute(f"llm.output_messages.{step}.message.content", full_response)
+        current_span.set_attribute(
+            f"llm.output_messages.{step}.message.role", "assistant"
+        )
+        current_span.set_attribute(
+            f"llm.output_messages.{step}.message.content", full_response
+        )
         if thinking:
-            current_span.set_attribute(f"llm.output_messages.{step}.message.thinking", thinking)
+            current_span.set_attribute(
+                f"llm.output_messages.{step}.message.thinking", thinking
+            )
         if tool_calls:
             for j, tool_call in enumerate(tool_calls):
                 # If tool_call has id, function, arguments, etc., flatten as per conventions
                 if hasattr(tool_call, "id"):
-                    current_span.set_attribute(f"llm.output_messages.{step}.message.tool_calls.{j}.tool_call.id", getattr(tool_call, "id", ""))
-                if hasattr(tool_call, "function") and hasattr(tool_call.function, "name"):
-                    current_span.set_attribute(f"llm.output_messages.{step}.message.tool_calls.{j}.tool_call.function.name", getattr(tool_call.function, "name", ""))
-                if hasattr(tool_call, "function") and hasattr(tool_call.function, "arguments"):
-                    current_span.set_attribute(f"llm.output_messages.{step}.message.tool_calls.{j}.tool_call.function.arguments", str(getattr(tool_call.function, "arguments", "")))
+                    current_span.set_attribute(
+                        f"llm.output_messages.{step}.message.tool_calls.{j}.tool_call.id",
+                        getattr(tool_call, "id", ""),
+                    )
+                if hasattr(tool_call, "function") and hasattr(
+                    tool_call.function, "name"
+                ):
+                    current_span.set_attribute(
+                        f"llm.output_messages.{step}.message.tool_calls.{j}.tool_call.function.name",
+                        getattr(tool_call.function, "name", ""),
+                    )
+                if hasattr(tool_call, "function") and hasattr(
+                    tool_call.function, "arguments"
+                ):
+                    current_span.set_attribute(
+                        f"llm.output_messages.{step}.message.tool_calls.{j}.tool_call.function.arguments",
+                        str(getattr(tool_call.function, "arguments", "")),
+                    )
 
         # Also set a summary output message
-        current_span.set_attribute("llm.output_messages", {
-            "role": "assistant",
-            "content": full_response,
-            "thinking": thinking,
-            "tool_calls": tool_calls,
-        })
+        current_span.set_attribute(
+            "llm.output_messages",
+            {
+                "role": "assistant",
+                "content": full_response,
+                "thinking": thinking,
+                "tool_calls": tool_calls,
+            },
+        )
 
         # Optionally, trace token counts, costs, or other details if available (not present in this code)
 
@@ -405,7 +430,6 @@ class Agent:
                         }
                     )
 
-
                     # Store tool result in database (generic)
                     self._store_message_in_db(
                         conversation_id=conversation_id,
@@ -416,7 +440,7 @@ class Agent:
                         tool_results=str(result),
                     )
                     current_span.set_attribute(
-                        "llm.function_call", 
+                        "llm.function_call",
                         f'{{"function_name": "{tool_call.function.name}", "args": "{tool_call.function.arguments}"}}',
                     )
                     current_span.set_attribute("llm.tool_result", str(result))
@@ -440,7 +464,7 @@ class Agent:
         thinking: str = "",
         tool_calls: str = "",
         tool_results: str = "",
-        tool_name: str = ""
+        tool_name: str = "",
     ) -> None:
         """
         Store any message in the database with tracing.
@@ -489,15 +513,13 @@ class Agent:
             Updated messages list
         """
         current_span = trace.get_current_span()
-        message= {
+        message = {
             "role": "assistant",
             "content": content,
             "thinking": thinking,
             "tool_calls": tool_calls,
         }
-        messages.append(
-            message
-        )
+        messages.append(message)
 
         current_span.set_attribute("llm.output_messages", message)
 

@@ -19,7 +19,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 # Get the path to the project root
 # This ensures log files are created in a consistent location
-project_root = Path(__file__).resolve().parent.parent.parent
+project_root = Path(__file__).resolve().parent.parent.parent.parent
 
 # Define the paths for your log files
 log_dir = project_root / "logs"
@@ -40,8 +40,7 @@ resource = Resource.create(
 # Set up logging
 log_provider = LoggerProvider(resource=resource)
 otlp_log_exporter = OTLPLogExporter(
-    endpoint="http://otel-collector:4317",
-    insecure=True
+    endpoint="http://otel-collector:4317", insecure=True
 )
 log_provider.add_log_record_processor(BatchLogRecordProcessor(otlp_log_exporter))
 set_logger_provider(log_provider)

@@ -1,4 +1,5 @@
-""" retrival the RAG info in vector database """
+"""retrival the RAG info in vector database"""
+
 import os
 from glob import glob
 
@@ -14,9 +15,10 @@ from structlog import get_logger
 # setup the logger
 logger = get_logger()
 
+
 class RAGRetrival:
     def __init__(self):
-        """ this is used to retrival the chunks from database """
+        """this is used to retrival the chunks from database"""
         # get the embedding
         self.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en")
         # vector store params
@@ -35,13 +37,13 @@ class RAGRetrival:
             self._build_rag_database()
 
     def _check_table_exists(self):
-        """ this func is used to detect if the table exists """
+        """this func is used to detect if the table exists"""
         engine = create_engine(os.environ["DATABASE_URL"])
         inspector = inspect(engine)
         return inspector.has_table("data_llamaindex")
 
     def _build_rag_database(self):
-        """ this func is used to build the rag database """
+        """this func is used to build the rag database"""
         pdf_paths = glob("/backend/src/agent/rag_agent/data/*.pdf")
         for pdf_path in pdf_paths:
             loader = PyMuPDFReader()
@@ -72,7 +74,7 @@ class RAGRetrival:
             self.vector_store.add(nodes)
 
     def retrive(self, state):
-        """ this func is used to retrive the database """
+        """this func is used to retrive the database"""
         # get the user query
         query = state["messages"][-1]["content"]
         mode = state["user_query"].extra_info.rag_mode
@@ -81,7 +83,7 @@ class RAGRetrival:
             query_str=query,
             query_embedding=query_embedding,
             similarity_top_k=2,
-            mode=mode
+            mode=mode,
         )
         query_result = self.vector_store.query(vector_store_query)
         rag_content = []
