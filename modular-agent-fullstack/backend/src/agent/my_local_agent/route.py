@@ -17,7 +17,7 @@ from .conversation import ConversationManager
 from .db import DatabaseManager, DatabaseUtils
 from .examples import get_weather, get_weather_conditions
 from .logging_config import LOGGING_CONFIG
-from .models import ChatMessage, Conversation, Role
+from .models import Conversation, Role
 import traceback
 
 
@@ -419,7 +419,7 @@ async def invoke(query: Conversation):
         current_span.set_attribute(
             "llm.input_messages", json.dumps([msg.to_dict() for msg in query.messages])
         )
-    
+
     except Exception as e:
         print_trace(e)
         print("Error e:", e)

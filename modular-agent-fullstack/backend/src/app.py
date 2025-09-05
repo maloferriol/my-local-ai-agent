@@ -23,6 +23,4 @@ app.mount(
 )  # Example of mounting another agent
 
 
-app.mount(
-    "/agent/my_local_agent", my_local_agent_app
-)
+app.mount("/agent/my_local_agent", my_local_agent_app)
