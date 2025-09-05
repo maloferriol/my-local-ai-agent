@@ -6,7 +6,6 @@ import logging
 from opentelemetry import trace
 
 from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
-from openinference.semconv.trace import SpanAttributes
 
 SQLite3Instrumentor().instrument()
 
