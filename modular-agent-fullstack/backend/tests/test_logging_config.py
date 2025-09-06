@@ -15,8 +15,8 @@ class TestLoggingConfiguration(unittest.TestCase):
         (instantiating OpenTelemetry exporters) that we need to control with mocks.
         """
         # Remove the module from the cache to force it to be reloaded.
-        if "src.agent.my_local_agent.logging_config" in sys.modules:
-            del sys.modules["src.agent.my_local_agent.logging_config"]
+        if "src.logging_config" in sys.modules:
+            del sys.modules["src.logging_config"]
 
     @patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter")
     @patch("opentelemetry.exporter.otlp.proto.grpc._log_exporter.OTLPLogExporter")
@@ -37,7 +37,7 @@ class TestLoggingConfiguration(unittest.TestCase):
         # Now import your logging config - this will use the mocks
         # Import AFTER setting up mocks to ensure they're used
         import logging.config
-        from src.agent.my_local_agent.logging_config import LOGGING_CONFIG
+        from src.logging_config import LOGGING_CONFIG
 
         # Apply the logging configuration
         logging.config.dictConfig(LOGGING_CONFIG)
