@@ -7,7 +7,7 @@ import json
 import re
 
 from src.agent.my_local_agent.conversation import ConversationManager
-from src.agent.my_local_agent.db import DatabaseManager
+from src.database.db import DatabaseManager
 from src.agent.my_local_agent.models import Role
 
 
@@ -113,7 +113,9 @@ def test_add_assistant_message(conversation_manager_fixture, db_manager_fixture)
 
     content = "Assistant response."
     thinking = "I am thinking about the response."
-    tool_calls = [{"function": {"name": "get_weather", "arguments": {"city": "London"}}}]
+    tool_calls = [
+        {"function": {"name": "get_weather", "arguments": {"city": "London"}}}
+    ]
     model = "test-model-assistant"
 
     # Act
@@ -252,7 +254,5 @@ def test_add_message_without_active_conversation(
     expected_error = "No active conversation. Call start_new_conversation() first."
 
     # Act & Assert
-    with pytest.raises(
-        RuntimeError, match=re.escape(expected_error)
-    ):
+    with pytest.raises(RuntimeError, match=re.escape(expected_error)):
         method_to_call(**args)
