@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 import sqlite3
 import logging
 from opentelemetry import trace
@@ -11,7 +14,11 @@ tracer = trace.get_tracer(__name__)
 # Get your logger instance for this module
 logger = logging.getLogger("db_sqlite_logger")
 
-default_db_file = "data/conversation_data.db"
+project_root = Path(__file__).resolve().parent.parent.parent.parent
+databases_dir = project_root / "databases"
+os.makedirs(databases_dir, exist_ok=True)
+
+default_db_file = databases_dir / "conversation_data.db"
 
 
 class DatabaseManager:
@@ -59,17 +66,45 @@ class DatabaseManager:
             return self.cursor.lastrowid  # Returns the ID of the last inserted row
         except sqlite3.Error as e:
             logger.error("Error executing query: %s", e)
+            print("[DB] Error executing query:", e)
+            raise
             return None
+        except Exception as e2:
+            print("[DB] Error executing query:", e2)
+            raise
 
     @tracer.start_as_current_span("fetch_all", kind=trace.SpanKind.INTERNAL)
     def fetch_all(self, query, params=()):
         """Fetches all rows from a query."""
         try:
+            if self.conn is None:
+                raise sqlite3.Error("Not connected to database. Call connect() first.")
             self.cursor.execute(query, params)
-            return self.cursor.fetchall()
+            rows = self.cursor.fetchall()
+            if rows:
+                columns = [description[0] for description in self.cursor.description]
+                return [dict(zip(columns, row)) for row in rows]
+            return []
         except sqlite3.Error as e:
             logger.error("Error fetching data: %s", e)
             return []
+
+    @tracer.start_as_current_span("fetch_one", kind=trace.SpanKind.INTERNAL)
+    def fetch_one(self, query, params=()):
+        """Fetches a single row from a query."""
+        try:
+            if self.conn is None:
+                raise sqlite3.Error("Not connected to database. Call connect() first.")
+            self.cursor.execute(query, params)
+            row = self.cursor.fetchone()
+            if row:
+                # Convert tuple to dictionary
+                columns = [description[0] for description in self.cursor.description]
+                return dict(zip(columns, row))
+            return None
+        except sqlite3.Error as e:
+            logger.error("Error fetching data: %s", e)
+            return None
 
     @tracer.start_as_current_span("create_init_tables", kind=trace.SpanKind.INTERNAL)
     def create_init_tables(self):
@@ -168,24 +203,18 @@ class DatabaseManager:
             return None
 
     @tracer.start_as_current_span("get_messages", kind=trace.SpanKind.INTERNAL)
-    def get_messages(self, conversation_id: int, limit: int = 10):
+    def get_messages(self, conversation_id: int):
         """Fetches messages for a specific conversation."""
         try:
-            self.conn.row_factory = sqlite3.Row
-            cursor = self.conn.cursor()
-            cursor.execute(
+            return self.fetch_all(
                 """
                 SELECT *
                 FROM messages
                 WHERE conversation_id = ?
                 ORDER BY step ASC
-                LIMIT ?
                 """,
-                (conversation_id, limit),
+                (conversation_id,),
             )
-            rows = cursor.fetchall()
-            self.conn.row_factory = None  # Reset row_factory
-            return [dict(row) for row in rows]
         except sqlite3.Error as e:
             logger.error(
                 "Error fetching messages for conversation_id %d: %s", conversation_id, e
@@ -208,15 +237,10 @@ class DatabaseManager:
     def get_conversation(self, conversation_id: int):
         """Fetches a single conversation by its ID."""
         try:
-            self.conn.row_factory = sqlite3.Row
-            cursor = self.conn.cursor()
-            cursor.execute(
+            return self.fetch_one(
                 "SELECT * FROM conversations WHERE id = ?",
                 (conversation_id,),
             )
-            row = cursor.fetchone()
-            self.conn.row_factory = None
-            return dict(row) if row else None
         except sqlite3.Error as e:
             logger.error("Error fetching conversation %d: %s", conversation_id, e)
             return None
@@ -264,23 +288,27 @@ class DatabaseManager:
             conversation_id = self.execute_query(
                 "INSERT INTO conversations (title) VALUES (?)", (random_title,)
             )
-            logger.info("Created new conversation with ID: %s", conversation_id)
-            logger.info("Created new conversation with title: %s", random_title)
+            # logger.info("Created new conversation with ID: %s", conversation_id)
+            # logger.info("Created new conversation with title: %s", random_title)
             print(random_title)
+            print("[DB] conv id", conversation_id)
             return conversation_id
         except sqlite3.Error as e:
             logger.error("Error creating conversation: %s", e)
-            return None
-
-
+            print("[DB] Error creating conversation:", e)
+            raise
+            # return None
+        except Exception as e:
+            print("[DB] Error creating conversation:", e)
+            raise
 
 
 # to make it work for the first time
 # import nltk
 # nltk.download('words')
 
-from nltk.corpus import words
-from random import sample
+# from nltk.corpus import words
+# from random import sample
 
 
 class DatabaseUtils:
@@ -294,4 +322,10 @@ class DatabaseUtils:
         Returns:
         str: A random name consisting of n words in lowercase joined by hyphens.
         """
+        import nltk
+
+        nltk.download("words")
+        from nltk.corpus import words
+        from random import sample
+
         return "-".join(sample(words.words(), n)).lower()

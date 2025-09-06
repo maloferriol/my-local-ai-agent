@@ -1,4 +1,5 @@
-""" a linked list data structure is used to define the workflow """
+"""a linked list data structure is used to define the workflow"""
+
 
 class Node:
     def __init__(self, node_fn, stage):
@@ -6,12 +7,13 @@ class Node:
         self.stage = stage
         self.next = None
 
+
 class WorkFlow:
     def __init__(self):
         self.head = None
 
     def insert(self, node):
-        """ this func is used to insert the node """
+        """this func is used to insert the node"""
         if self.head is None:
             self.head = node
             return

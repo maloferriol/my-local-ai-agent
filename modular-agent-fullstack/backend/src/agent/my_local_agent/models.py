@@ -1,23 +1,24 @@
-
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from enum import Enum
+
 
 # Define the Enum first
 class Role(Enum):
-    USER = 'user'
-    ASSISTANT = 'assistant'
-    SYSTEM = 'system'
-    TOOL = 'tool'
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+    TOOL = "tool"
 
 
 @dataclass
 class ChatMessage:
     """Represents a single message in a conversation."""
-    id: int
+
     role: Role
     content: str
+    id: Optional[int] = None
     timestamp: Optional[datetime] = None
     thinking: Optional[str] = None
     tool_calls: Optional[List[Dict[str, Any]]] = None
@@ -33,20 +34,18 @@ class ChatMessage:
         # Filter out None values for cleaner API payloads
         return {k: v for k, v in data.items() if v is not None}
 
+
 @dataclass
 class Conversation:
     """Represents a conversation session."""
-    id: int
+
+    id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     title: Optional[str] = None
     model: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
-    messages: List[ChatMessage] = None
-
-    def __post_init__(self):
-        if self.messages is None:
-            self.messages = []
+    messages: List[ChatMessage] = field(default_factory=list)
 
     def add_message(self, message: ChatMessage):
         """Add a message to the conversation."""

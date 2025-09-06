@@ -16,6 +16,13 @@ app.add_middleware(
 )
 
 # mount the app
-app.mount("/gemini_agent", gemini_agent_app)
-app.mount("/rag_agent", rag_agent_app)
-app.mount("/my_local_agent", my_local_agent_app)  # Example of mounting another agent
+app.mount("/agent/gemini_agent", gemini_agent_app)
+app.mount("/agent/rag_agent", rag_agent_app)
+app.mount(
+    "/agent/my_local_agent", my_local_agent_app
+)  # Example of mounting another agent
+
+
+app.mount(
+    "/agent/my_local_agent", my_local_agent_app
+)
