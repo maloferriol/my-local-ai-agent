@@ -6,7 +6,7 @@ import pytest
 import json
 import re
 
-from src.agent.my_local_agent.conversation import ConversationManager
+from src.conversation import ConversationManager
 from src.database.db import DatabaseManager
 from src.models import Role
 
