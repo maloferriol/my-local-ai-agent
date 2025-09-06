@@ -9,6 +9,8 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from ollama import AsyncClient
 
+from rich import print
+
 from .examples import get_weather, get_weather_conditions
 from .logging_config import LOGGING_CONFIG
 from .models import Conversation, ChatMessage
@@ -66,18 +68,17 @@ async def _stream_model_response(
         )
 
         async for event in response_stream:
+            msg = event.get("message", {})
             if not event.get("done"):
-                msg = event.get("message", {})
-
                 if thinking_chunk := msg.get("thinking"):
                     yield {"stage": "thinking", "response": thinking_chunk}
 
                 if content_chunk := msg.get("content", ""):
                     yield {"stage": "content", "response": content_chunk}
 
-                if tool_calls := msg.get("tool_calls"):
-                    for tool_call in tool_calls:
-                        yield {"stage": "tool_call_chunk", "tool_call": tool_call}
+            if tool_calls := msg.get("tool_calls"):
+                for tool_call in tool_calls:
+                    yield {"stage": "tool_call_chunk", "tool_call": tool_call}
     except Exception as e:
         print(f"FAIL Ollama client chat error: {e}")
         logger.error(f"Ollama client chat error: {e}")
@@ -163,66 +164,59 @@ async def _stream_chat_with_tools_refactored(messages: List[ChatMessage], model:
     This refactored function delegates streaming and tool logic to helper
     async generators, making the control flow clearer.
     """
-    try:
-        # Model-specific setup
-        # Todo extract this into a config file
-        available_tools = None
-        thinking_effort = None
-        if model in ["gpt-oss:20b"]:
-            available_tools = list(available_tools_default.values())
-            thinking_effort = "low"
 
-        tools_count = len(available_tools) if available_tools else 0
-        print(f"Starting chat stream with model: {model}, tools: {tools_count}")
-        logger.info(f"Starting chat stream with model: {model}")
+    # Model-specific setup
+    # Todo extract this into a config file
+    available_tools = None
+    thinking_effort = None
+    if model in ["gpt-oss:20b"]:
+        available_tools = list(available_tools_default.values())
+        thinking_effort = "low"
 
-        count = 0
-        while True:
-            count += 1
-            print("count:", count)
-            try:
-                tool_calls_this_turn = []
+    tools_count = len(available_tools) if available_tools else 0
+    print(f"Starting chat stream with model: {model}, tools: {tools_count}")
+    logger.info(f"Starting chat stream with model: {model}")
 
-                # === Part 1: Stream model response and collect tool calls ===
-                streamer = _stream_model_response(
-                    messages, model, thinking_effort, available_tools
-                )
-                async for chunk in streamer:
-                    # If it's a tool_call chunk, collect it. Otherwise, stream it.
-                    if chunk["stage"] == "tool_call_chunk":
-                        tool_calls_this_turn.append(chunk["tool_call"])
-                    else:
-                        yield json.dumps(chunk) + "\n"
+    count = 0
+    while True:
+        count += 1
+        print("count:", count)
+        try:
+            tool_calls_this_turn = []
 
-                # === Part 2: Check for tool calls and execute them ===
-                if not tool_calls_this_turn:
-                    yield json.dumps({"stage": "finalize_answer"}) + "\n"
-                    break  # No tools to call, so we're done.
+            # === Part 1: Stream model response and collect tool calls ===
+            streamer = _stream_model_response(
+                messages, model, thinking_effort, available_tools
+            )
+            async for chunk in streamer:
+                # If it's a tool_call chunk, collect it. Otherwise, stream it.
+                if chunk["stage"] == "tool_call_chunk":
+                    tool_calls_this_turn.append(chunk["tool_call"])
+                else:
+                    yield json.dumps(chunk) + "\n"
 
-                print(f"Executing {len(tool_calls_this_turn)} tool calls")
-                # We have tools to call, so execute them and stream results.
-                # The 'messages' list is passed by reference and will be updated inside.
-                tool_executor = _execute_tools(tool_calls_this_turn, messages)
-                async for tool_result in tool_executor:
-                    yield json.dumps(tool_result) + "\n"
+            # === Part 2: Check for tool calls and execute them ===
+            if not tool_calls_this_turn:
+                yield json.dumps({"stage": "finalize_answer"}) + "\n"
+                break  # No tools to call, so we're done.
 
-                # Loop continues to the next turn with the updated messages list...
-            except Exception as e:
-                print(f"FAIL Error in chat loop iteration: {e}")
-                logger.error(f"Error in chat loop iteration: {e}")
-                error_response = {
-                    "stage": "error",
-                    "response": f"Chat loop error: {str(e)}",
-                }
-                yield json.dumps(error_response) + "\n"
-                break  # Exit the loop on critical error
+            print(f"Executing {len(tool_calls_this_turn)} tool calls")
+            # We have tools to call, so execute them and stream results.
+            # The 'messages' list is passed by reference and will be updated inside.
+            tool_executor = _execute_tools(tool_calls_this_turn, messages)
+            async for tool_result in tool_executor:
+                yield json.dumps(tool_result) + "\n"
 
-    except Exception as e:
-        error_msg = f"An unexpected error occurred in the chat stream: {e}"
-        print(f"FAIL {error_msg}")
-        logger.error(error_msg)
-        res = {"stage": "error", "response": str(e)}
-        yield json.dumps(res) + "\n"
+            # Loop continues to the next turn with the updated messages list...
+        except Exception as e:
+            print(f"FAIL Error in chat loop iteration: {e}")
+            logger.error(f"Error in chat loop iteration: {e}")
+            error_response = {
+                "stage": "error",
+                "response": f"Chat loop error: {str(e)}",
+            }
+            yield json.dumps(error_response) + "\n"
+            break  # Exit the loop on critical error
 
 
 @app.post("/invoke")
