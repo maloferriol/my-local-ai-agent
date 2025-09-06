@@ -1,0 +1,75 @@
+# otel-collector-config.yaml
+# docker run --rm -it -v $(pwd)/otel-collector-config.yaml:/etc/otelcol/config.yaml -p 4317:4317 -p 4318:4318  otel/opentelemetry-collector:latest
+receivers:
+  # Data sources: traces, metrics, logs
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}  # Batch processor, sends telemetry data in batches to improve performance
+
+exporters:
+  # Data sources: traces, metrics, logs
+  # NOTE: Prior to v0.86.0 use `logging` instead of `debug`
+  debug/metrics:
+    verbosity: detailed
+  debug/traces:
+    verbosity: detailed
+  debug/logs:
+    verbosity: detailed
+
+  # Data sources: traces, metrics, logs
+  file:
+    path: ./logs/filename.json
+
+  # Export metrics as a Prometheus scraping endpoint
+  otlphttp/prometheus:
+    endpoint: 'http://prometheus:9090/api/v1/write'
+    # endpoint: "prometheus:9464"
+    tls:
+      insecure: true
+    # Enable conversion of Resource attributes to metric labels, ensuring service.name etc. appear in Prometheus labels
+    # resource_to_telemetry_conversion:
+    #   enabled: true
+   
+  
+  # Export logs to Loki via OTLP HTTP (using Loki's native OTLP log receiver)
+  otlphttp/loki:
+    # VERIFY THIS ONE
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+
+  # Export traces to Tempo via OTLP HTTP
+  otlphttp/tempo:
+    # This is set in the tempo-local.yaml file in the distributor section
+    endpoint: "http://tempo:4318"
+    tls:
+      insecure: true 
+
+  otlphttp/phoenix:
+    # VERIFY THIS ONE
+    endpoint: http://phoenix:6006
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      # exporters: [debug/traces, otlphttp/tempo]
+      exporters: [debug/traces, otlphttp/tempo, otlphttp/phoenix]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug/metrics, otlphttp/prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      # exporters: [debug/logs, otlphttp/loki]
+      exporters: [otlphttp/loki]
