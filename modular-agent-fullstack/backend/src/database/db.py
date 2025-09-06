@@ -301,14 +301,6 @@ class DatabaseManager:
             raise
 
 
-# to make it work for the first time
-# import nltk
-# nltk.download('words')
-
-# from nltk.corpus import words
-# from random import sample
-
-
 class DatabaseUtils:
     def generate_random_name(n: int = 3) -> str:
         """

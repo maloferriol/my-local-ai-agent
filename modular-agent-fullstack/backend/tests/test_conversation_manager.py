@@ -8,7 +8,7 @@ import re
 
 from src.agent.my_local_agent.conversation import ConversationManager
 from src.database.db import DatabaseManager
-from src.agent.my_local_agent.models import Role
+from src.models import Role
 
 
 @pytest.fixture(scope="function")
