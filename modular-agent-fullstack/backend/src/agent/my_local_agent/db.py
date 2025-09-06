@@ -130,7 +130,7 @@ class DatabaseManager:
             current_span.set_attribute("db.model", model)
             current_span.set_attribute("db.name", default_db_file)
 
-            self.execute_query(
+            message_id = self.execute_query(
                 """
                 INSERT INTO messages (
                     conversation_id,
@@ -162,23 +162,30 @@ class DatabaseManager:
                 conversation_id,
                 step,
             )
+            return message_id
         except sqlite3.Error as e:
             logger.error("Error inserting message: %s", e)
+            return None
 
     @tracer.start_as_current_span("get_messages", kind=trace.SpanKind.INTERNAL)
     def get_messages(self, conversation_id: int, limit: int = 10):
         """Fetches messages for a specific conversation."""
         try:
-            return self.fetch_all(
+            self.conn.row_factory = sqlite3.Row
+            cursor = self.conn.cursor()
+            cursor.execute(
                 """
                 SELECT *
                 FROM messages
                 WHERE conversation_id = ?
-                ORDER BY id DESC
+                ORDER BY step ASC
                 LIMIT ?
                 """,
                 (conversation_id, limit),
             )
+            rows = cursor.fetchall()
+            self.conn.row_factory = None  # Reset row_factory
+            return [dict(row) for row in rows]
         except sqlite3.Error as e:
             logger.error(
                 "Error fetching messages for conversation_id %d: %s", conversation_id, e
@@ -196,6 +203,41 @@ class DatabaseManager:
         except sqlite3.Error as e:
             logger.error("Error fetching conversations with pagination: %s", e)
             return []
+
+    @tracer.start_as_current_span("get_conversation", kind=trace.SpanKind.INTERNAL)
+    def get_conversation(self, conversation_id: int):
+        """Fetches a single conversation by its ID."""
+        try:
+            self.conn.row_factory = sqlite3.Row
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "SELECT * FROM conversations WHERE id = ?",
+                (conversation_id,),
+            )
+            row = cursor.fetchone()
+            self.conn.row_factory = None
+            return dict(row) if row else None
+        except sqlite3.Error as e:
+            logger.error("Error fetching conversation %d: %s", conversation_id, e)
+            return None
+
+    @tracer.start_as_current_span("get_message_count", kind=trace.SpanKind.INTERNAL)
+    def get_message_count(self, conversation_id: int) -> int:
+        """Fetches the number of messages for a specific conversation."""
+        try:
+            self.cursor.execute(
+                "SELECT COUNT(id) FROM messages WHERE conversation_id = ?",
+                (conversation_id,),
+            )
+            count = self.cursor.fetchone()[0]
+            return count
+        except sqlite3.Error as e:
+            logger.error(
+                "Error fetching message count for conversation_id %d: %s",
+                conversation_id,
+                e,
+            )
+            return 0
 
     @tracer.start_as_current_span("drop_table", kind=trace.SpanKind.INTERNAL)
     def drop_table(self, table_name: str):
