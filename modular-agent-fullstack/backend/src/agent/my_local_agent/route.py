@@ -16,11 +16,10 @@ from rich import print
 from .conversation import ConversationManager
 from .examples import get_weather, get_weather_conditions
 from .logging_config import LOGGING_CONFIG
-from .models import Conversation, Role
 import traceback
 
-
 from src.database.db import DatabaseManager, DatabaseUtils
+from src.models import Conversation, Role
 
 
 # Configure logging
