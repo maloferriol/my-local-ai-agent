@@ -14,11 +14,16 @@ from opentelemetry import trace
 from rich import print
 
 from .conversation import ConversationManager
-from .db import DatabaseManager, DatabaseUtils
 from .examples import get_weather, get_weather_conditions
 from .logging_config import LOGGING_CONFIG
 from .models import Conversation, Role
 import traceback
+
+
+from src.database.db import DatabaseManager, DatabaseUtils
+
+
+
 
 
 # Configure logging
