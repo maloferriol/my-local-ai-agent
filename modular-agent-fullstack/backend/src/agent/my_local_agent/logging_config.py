@@ -39,14 +39,17 @@ resource = Resource.create(
 
 # Set up logging
 log_provider = LoggerProvider(resource=resource)
-otlp_log_exporter = OTLPLogExporter(endpoint="http://localhost:4317", insecure=True)
+otlp_log_exporter = OTLPLogExporter(
+    endpoint="http://otel-collector:4317",
+    insecure=True
+)
 log_provider.add_log_record_processor(BatchLogRecordProcessor(otlp_log_exporter))
 set_logger_provider(log_provider)
 
 
 # Set up the OTLP exporter and tracer provider
 trace.set_tracer_provider(TracerProvider(resource=resource))
-otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4317", insecure=True)
+otlp_exporter = OTLPSpanExporter(endpoint="http://otel-collector:4317", insecure=True)
 span_processor = BatchSpanProcessor(otlp_exporter)
 trace.get_tracer_provider().add_span_processor(span_processor)
 
