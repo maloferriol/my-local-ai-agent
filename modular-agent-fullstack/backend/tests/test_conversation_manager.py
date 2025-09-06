@@ -7,7 +7,7 @@ import json
 import re
 
 from src.agent.my_local_agent.conversation import ConversationManager
-from src.agent.my_local_agent.db import DatabaseManager
+from src.database.db import DatabaseManager
 from src.agent.my_local_agent.models import Role
 
 
