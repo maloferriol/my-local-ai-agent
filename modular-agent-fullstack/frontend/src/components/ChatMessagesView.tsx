@@ -1,5 +1,5 @@
 import type React from "react";
-import type { Message } from "@/lib/types";
+import { RoleType, type ChatMessage } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Copy, CopyCheck } from "lucide-react";
 import { InputForm } from "@/components/InputForm";
@@ -14,6 +14,21 @@ import {
 } from "@/components/ActivityTimeline"; // Assuming ActivityTimeline is in the same dir or adjust path
 import { ThinkingStream } from "@/components/ThinkingStream";
 import { SelectedAgentParams } from "@/components/registry/AgentRegistry";
+
+
+/**
+ * TODO:
+ * [ ] fix the fact that the ActivityTimeline is disappearing 
+ * [ ] Try to show thinking at each steps, if not possible then focus on the Data Model
+ * [ ] Fix the Gemma3:4b issue
+ *    [x] user should see answer for Gemma3:4b
+ *    [ ] [Nice to have] Fix the fact that the model settings reset after each message
+ * [ ] Update the Thinking Effort object to let the user select it
+ * [ ] Investigate the OpenTelemetry for the UI 
+ * [ ] Add Copy paste for user message
+ * [ ] Fix the fact that assistant message are passed as user message
+ */  
+
 
 // Markdown component props type from former ReportView
 type MdComponentProps = {
@@ -136,14 +151,14 @@ const mdComponents = {
   ),
 };
 
-// Props for HumanMessageBubble
-interface HumanMessageBubbleProps {
-  message: Message;
+// Props for UserMessageBubble
+interface UserMessageBubbleProps {
+  message: ChatMessage;
   mdComponents: typeof mdComponents;
 }
 
-// HumanMessageBubble Component
-const HumanMessageBubble: React.FC<HumanMessageBubbleProps> = ({
+// UserMessageBubble Component
+const UserMessageBubble: React.FC<UserMessageBubbleProps> = ({
   message,
   mdComponents,
 }) => {
@@ -162,7 +177,7 @@ const HumanMessageBubble: React.FC<HumanMessageBubbleProps> = ({
 
 // Props for AiMessageBubble
 interface AiMessageBubbleProps {
-  message: Message;
+  message: ChatMessage;
   historicalActivity: ProcessedEvent[] | undefined;
   liveActivity: ProcessedEvent[] | undefined;
   isLastMessage: boolean;
@@ -193,7 +208,7 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
   const isLiveActivityForThisBubble = isLastMessage && isOverallLoading;
 
   return (
-    <div className={`relative break-words flex flex-col`}>
+    <div className={`relative break-words flex flex-col`}  style={{ width: '100%' }}>
       {activityForThisBubble && activityForThisBubble.length > 0 && (
         <div className="mb-3 border-b border-neutral-700 pb-3 text-xs">
           <ActivityTimeline
@@ -202,11 +217,12 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
           />
         </div>
       )}
-      {isLastMessage && (
-        <div className="mb-3 border-b border-neutral-700 pb-3 text-xs">
+      {isLastMessage && (isThinking || thinkingContent) && (
+        <div className="mb-3 border-b border-neutral-700 pb-3 text-xs" style={{ width: '100%' }}>
           <ThinkingStream
             thinkingContent={thinkingContent || ""}
-            isThinking={isThinking || false}
+            isThinking={isThinking}
+            isInitialyCollapsed={true}
           />
         </div>
       )}
@@ -235,7 +251,7 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
 };
 
 interface ChatMessagesViewProps {
-  messages: Message[];
+  messages: ChatMessage[];
   isLoading: boolean;
   scrollAreaRef: React.RefObject<HTMLDivElement | null>;
   onSubmit: (inputValue: string, selectedAgent: string, eventInfo: (data: any) => any, queryExtraInfo: any) => void;
@@ -281,11 +297,11 @@ export function ChatMessagesView({
               <div key={message.id || `msg-${index}`} className="space-y-3">
                 <div
                   className={`flex items-start gap-3 ${
-                    message.type === "human" ? "justify-end" : ""
+                    message.role === RoleType.User ? "justify-end" : ""
                   }`}
                 >
-                  {message.type === "human" ? (
-                    <HumanMessageBubble
+                  {message.role === RoleType.User ? (
+                    <UserMessageBubble
                       message={message}
                       mdComponents={mdComponents}
                     />
@@ -309,25 +325,28 @@ export function ChatMessagesView({
           })}
           {isLoading &&
             (messages.length === 0 ||
-              messages[messages.length - 1].type === "human") && (
+              messages[messages.length - 1].role === RoleType.User) && (
               <div className="flex items-start gap-3 mt-3">
-                {" "}
-                {/* AI message row structure */}
                 <div className="relative group max-w-[85%] md:max-w-[80%] rounded-xl p-3 shadow-sm break-words bg-neutral-800 text-neutral-100 rounded-bl-none w-full min-h-[56px]">
-                  {liveActivityEvents.length > 0 ? (
+                  {(liveActivityEvents.length > 0 || (isThinking || thinkingContent)) ? (
                     <div>
-                    <div className="text-xs">
-                      <ActivityTimeline
-                        processedEvents={liveActivityEvents}
-                        isLoading={true}
-                      />
-                    </div>
-                    <div className="text-xs mt-3">
-                      <ThinkingStream
-                        thinkingContent={thinkingContent || ""}
-                        isThinking={isThinking}
-                      />
-                    </div>
+                      {liveActivityEvents.length > 0 && (
+                        <div className="text-xs">
+                          <ActivityTimeline
+                            processedEvents={liveActivityEvents}
+                            isLoading={true}
+                          />
+                        </div>
+                      )}
+                      {(isThinking || thinkingContent) && (
+                        <div className="text-xs mt-3">
+                          <ThinkingStream
+                            thinkingContent={thinkingContent}
+                            isThinking={isThinking}
+                            isInitialyCollapsed={true}
+                          />
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="flex items-center justify-start h-full">

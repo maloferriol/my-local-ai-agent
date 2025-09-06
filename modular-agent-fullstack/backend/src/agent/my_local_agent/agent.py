@@ -74,60 +74,60 @@ class Agent:
         logger.debug("Available tools: %s", list(available_tools.keys()))
         return available_tools
 
-    def _display_startup_info(self):
-        """Display startup information including tools and recent conversations."""
-        from rich.console import Console
+    # def _display_startup_info(self):
+    #     """Display startup information including tools and recent conversations."""
+    #     from rich.console import Console
 
-        console = Console()
-        console.print(Formatters.create_tools_list_section(self.available_tools))
+    #     console = Console()
+    #     console.print(Formatters.create_tools_list_section(self.available_tools))
 
-        conversations = self.db_manager.get_conversations(limit=10)
-        console.print(Formatters.create_conversation_list_section(conversations))
+    #     conversations = self.db_manager.get_conversations(limit=10)
+    #     console.print(Formatters.create_conversation_list_section(conversations))
 
-    def run(self):
-        """Start the interactive chat loop."""
-        print("Interactive chat started. Type '/quit' or Ctrl-D to exit.\n")
+    # def run(self):
+    #     """Start the interactive chat loop."""
+    #     print("Interactive chat started. Type '/quit' or Ctrl-D to exit.\n")
 
-        # Display available tools and recent conversations
-        self._display_startup_info()
+    #     # Display available tools and recent conversations
+    #     self._display_startup_info()
 
-        # Start the conversation loop
-        self._run_conversation_loop()
+    #     # Start the conversation loop
+    #     self._run_conversation_loop()
 
-    def _run_conversation_loop(self):
-        """Main conversation loop."""
-        from rich.console import Console
+    # def _run_conversation_loop(self):
+    #     """Main conversation loop."""
+    #     from rich.console import Console
 
-        console = Console()
-        conversation_messages = []
+    #     console = Console()
+    #     conversation_messages = []
 
-        while True:
-            try:
-                user_input = self._get_user_input()
-                if not user_input:
-                    continue
+    #     while True:
+    #         try:
+    #             user_input = self._get_user_input()
+    #             if not user_input:
+    #                 continue
 
-                if self._should_exit(user_input):
-                    console.print("[bold red]Bye.")
-                    break
+    #             if self._should_exit(user_input):
+    #                 console.print("[bold red]Bye.")
+    #                 break
 
-                # Process the user input
-                self._process_user_input(user_input, conversation_messages)
+    #             # Process the user input
+    #             self._process_user_input(user_input, conversation_messages)
 
-            except (EOFError, KeyboardInterrupt):
-                print("\nExiting.")
-                break
+    #         except (EOFError, KeyboardInterrupt):
+    #             print("\nExiting.")
+    #             break
 
-    def _get_user_input(self) -> str:
-        """Get input from the user."""
-        from rich.console import Console
+    # def _get_user_input(self) -> str:
+    #     """Get input from the user."""
+    #     from rich.console import Console
 
-        console = Console()
-        return console.input("[bold green]You: ").strip()
+    #     console = Console()
+    #     return console.input("[bold green]You: ").strip()
 
-    def _should_exit(self, user_input: str) -> bool:
-        """Check if the user wants to exit."""
-        return user_input.lower() in ("/quit", "/exit", "quit", "exit")
+    # def _should_exit(self, user_input: str) -> bool:
+    #     """Check if the user wants to exit."""
+    #     return user_input.lower() in ("/quit", "/exit", "quit", "exit")
 
     @tracer.start_as_current_span(
         name="_get_conversation_id",

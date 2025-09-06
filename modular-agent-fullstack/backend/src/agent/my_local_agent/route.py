@@ -1,79 +1,185 @@
-""" Simple module for direct Ollama chat interactions """
+"""Module for handling Ollama chat interactions and tool execution."""
+
 import json
-from typing import List, Optional
+import logging.config
 import os
+from typing import List, Optional
 
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from ollama import AsyncClient
 
-import logging.config
-from .logging_config import LOGGING_CONFIG  # Note the relative import
+from .examples import get_weather, get_weather_conditions
+from .logging_config import LOGGING_CONFIG
+from .models import Conversation, ChatMessage
 
-# Apply the logging configuration
+# Configure logging
 logging.config.dictConfig(LOGGING_CONFIG)
+logger = logging.getLogger(__name__)
 
-
-class Message(BaseModel):
-    type: str
-    content: str
-    thinking: Optional[str] = None
-    id: str
-
-class ExtraInfo(BaseModel):
-    reasoning_model: Optional[str] = "gemma:3b"
-
-class UserQuery(BaseModel):
-    messages: List[Message]
-    extra_info: ExtraInfo
 
 # Initialize Ollama client
 ollama_client = AsyncClient(host=os.environ["OLLAMA_URL"])
 
+
 app = FastAPI()
 
-@app.post("/invoke")
-async def invoke(query: UserQuery):
-    """ Handle user query directly with Ollama """
-    # Convert messages to Ollama format
-    messages = [{"role": "user" if msg.type == "human" else "assistant", 
-                "content": msg.content} for msg in query.messages]
-    
-    # try:
-    #     # Create and run the agent
-    #     agent = Agent(model=args.model, stream=args.stream)
-    #     agent.run()
+available_tools_default = {
+    "get_weather": get_weather,
+    "get_weather_conditions": get_weather_conditions,
+}
 
-    # except KeyboardInterrupt:
-    #     print("\nInterrupted by user.")
-    #     sys.exit(0)
-    # except Exception as e:
-    #     logger.exception("Unhandled error: %s", e)
-    #     print(f"Error: {e}", file=sys.stderr)
-    #     sys.exit(1)
+
+async def _stream_chat_with_tools(messages: List[ChatMessage], model: str):
+    """Stream chat responses with tool execution capabilities.
     
-    async def stream():
-        try:
+    Args:
+        messages: List of chat messages
+        model: Name of the model to use
+        
+    Yields:
+        JSON-encoded strings containing response chunks and tool execution results
+    """
+    
+    try:
+        available_tools = None
+        thinking_effort = None
+        if model in ["gpt-oss:20b"]:
+            available_tools = list(available_tools_default.values())
+            thinking_effort = 'low'
+            
+        while True:
             response = await ollama_client.chat(
-                model=query.extra_info.reasoning_model,
+                model=model,
                 messages=messages,
-                stream=True
+                think=thinking_effort,
+                tools=available_tools,
+                stream=True,
             )
             
+            logger.debug("Starting chat stream with model: %s", model)
+
+            full_response = ""
+            thinking = ""
+            tool_calls = []
+
             async for event in response:
-                if not event["done"]:
-                    # print('vent["message"', event["message"])
-                    # Stream both thinking and content steps
-                    if event["message"].get("thinking"):
-                        res = {"stage": "thinking", "response": event["message"]["thinking"]}
-                        yield json.dumps(res) + "\n"
-                    
-                    res = {"stage": "finalize_answer", "response": event["message"]["content"]}
+                try:
+                    if event.get('message', {}).get('tool_calls'):
+                        tool_calls.extend(event['message']['tool_calls'])
+                except Exception as e:
+                    logger.error("Error processing tool calls: %s", str(e))
+                    res = {"stage": "error", "response": str(e)}
                     yield json.dumps(res) + "\n"
-                    
-        except Exception as e:
-            res = {"stage": "error", "response": str(e)}
-            yield json.dumps(res) + "\n"
-            
-    return StreamingResponse(stream())
+                    break
+
+                if not event.get("done"):
+                    msg = event.get("message", {})
+                    thinking_chunk = msg.get("thinking")
+                    if thinking_chunk:
+                        yield json.dumps({
+                            "stage": "thinking",
+                            "response": thinking_chunk,
+                        }) + "\n"
+                        thinking += thinking_chunk
+
+                    # Stream content
+                    content_chunk = msg.get("content", "")
+                    if content_chunk:
+                        full_response += content_chunk
+                        yield json.dumps({
+                            "stage": "content",
+                            "response": content_chunk,
+                            "tool_calls": msg.get("tool_calls", []),
+                        }) + "\n"
+
+                    # Accumulate tool calls if any
+                    tool_call = getattr(msg, "tool_calls", None) or msg.get("tool_calls")
+                    if tool_call:
+                        tool_calls.extend(tool_call)
+
+            if tool_calls == []:
+                # End of this model turn: emit a finalize marker once
+                yield json.dumps({"stage": "finalize_answer"}) + "\n"
+
+            # If there are tool calls, execute them, append results, continue loop
+            if tool_calls:
+                for tool_call in tool_calls:
+                    try:
+                        tool_name = tool_call.function.name
+
+                        function_to_call = available_tools_default.get(tool_name)
+                        if function_to_call:
+                            try:
+                                args = tool_call.function.arguments
+                                result = function_to_call(**args)
+                                # Stream tool result right away
+                                yield json.dumps({
+                                    "stage": "tool_result",
+                                    "tool": tool_name,
+                                    "args": args,
+                                    "result": result,
+                                }) + "\n"
+
+                                # Append tool result to messages for next model turn
+                                messages.append(
+                                    {
+                                        "role": "tool",
+                                        "content": result,
+                                        "tool_name": tool_name,
+                                    }
+                                )
+                            except Exception as e:
+                                logger.error("Tool execution error: %s", str(e))
+                                yield json.dumps({
+                                    "stage": "tool_error",
+                                    "tool": tool_name,
+                                    "error": str(e),
+                                }) + "\n"
+                    except Exception as tool_err:
+                        logger.error("Tool invocation error: %s", str(tool_err))
+                        yield json.dumps({
+                            "stage": "tool_error",
+                            "tool": tool_name if 'tool_name' in locals() else None,
+                            "error": str(tool_err),
+                        }) + "\n"
+
+                # Continue loop to let the model respond using tool outputs
+                continue
+            else:
+                # No more tool calls; finish
+                break
+
+    except Exception as e:
+        res = {"stage": "error", "response": str(e)}
+        yield json.dumps(res) + "\n"
+
+
+@app.post("/invoke")
+async def invoke(query: Conversation):
+    """
+    Handle user queries by streaming responses from Ollama.
+
+    Args:
+        query: UserQuery object containing messages and model configuration
+
+    Returns:
+        StreamingResponse containing chat responses and tool execution results
+    """
+    logger.info("Received chat")
+
+    try:
+        model = query.messages[len(query.messages)-1].model
+    except Exception as e:
+        model = "gpt-oss:20b"
+        print('FAIL model error:', e)
+
+    try:
+        msgs = [msg.to_dict() for msg in query.messages]
+    except Exception as e:
+        print('FAIL parsing messages error:', e)
+
+    return StreamingResponse(
+        _stream_chat_with_tools(msgs, model),
+        media_type="text/plain"
+    )
