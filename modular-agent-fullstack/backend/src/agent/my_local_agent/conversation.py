@@ -9,7 +9,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from .models import Conversation, ChatMessage, Role
+from src.models import Conversation, ChatMessage, Role
 
 
 conversation_logger = logging.getLogger("conversations_logger")
