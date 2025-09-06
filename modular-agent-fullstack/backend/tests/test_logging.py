@@ -23,7 +23,7 @@ class TestLogging(unittest.TestCase):
 
         # Now import your logging config - this will use the mocks
         # Import AFTER setting up mocks to ensure they're used
-        
+
         from src.logging_config import LOGGING_CONFIG
 
         # Apply the logging configuration
