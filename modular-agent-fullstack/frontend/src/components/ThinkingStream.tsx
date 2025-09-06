@@ -6,31 +6,25 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Brain, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 interface ThinkingStreamProps {
   thinkingContent: string;
   isThinking: boolean;
+  isInitialyCollapsed: boolean;
 }
 
 export function ThinkingStream({
   thinkingContent,
   isThinking,
+  isInitialyCollapsed,
 }: ThinkingStreamProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [hasContent, setHasContent] = useState(false);
-
-  // Set hasContent to true when we first receive content
-  useEffect(() => {
-    if (thinkingContent) {
-      setHasContent(true);
-    }
-  }, [thinkingContent]);
-
-  if (!hasContent) return null;
+  const [isCollapsed, setIsCollapsed] = useState(isInitialyCollapsed);
+  // Show component when there's thinking content or when actively thinking
+  if (!thinkingContent && !isThinking) return null;
 
   return (
-    <Card className="border-none rounded-lg bg-neutral-700 mt-4">
+    <Card className="border-none rounded-lg bg-neutral-700 mt-4" style={{ width: '100%' }}>
       <CardHeader className="pb-2">
         <CardDescription className="flex items-center justify-between">
           <div

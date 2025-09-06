@@ -1,11 +1,12 @@
-import type { Message } from "@/lib/types";
+import type { ChatMessage } from "@/lib/types";
+import {RoleType}  from "@/lib/types";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ProcessedEvent } from "@/components/ActivityTimeline";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { ChatMessagesView } from "@/components/ChatMessagesView";
 import { getAgentResponse } from "@/lib/apis/agent";
-import { UserQuery } from "@/lib/types";
-import { getSelectedAgentState } from "@/components/registry/AgentRegistry";
+import { Conversation } from "@/lib/types";
+import { useSelectedAgent } from "@/hooks/useSelectedAgent";
 
 export default function App() {
   const [processedEventsTimeline, setProcessedEventsTimeline] = useState<
@@ -16,13 +17,13 @@ export default function App() {
   >({});
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const hasFinalizeEventOccurredRef = useRef(false);
-  const [chats, setChats] = useState<Message[]>([]);
-  const chatsRef = useRef<Message[]>([]);
+  const [chats, setChats] = useState<ChatMessage[]>([]);
+  const chatsRef = useRef<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [thinkingContent, setThinkingContent] = useState<string>("");
   const [isThinking, setIsThinking] = useState<boolean>(false);
   // select agent states
-  const { selectedAgent, setSelectedAgent } = getSelectedAgentState();
+  const { selectedAgent, setSelectedAgent } = useSelectedAgent();
 
   useEffect(() => {
     chatsRef.current = chats;
@@ -44,7 +45,7 @@ export default function App() {
       chats.length > 0
     ) {
       const lastMessage = chats[chats.length - 1];
-      if (lastMessage && lastMessage.type === "ai" && lastMessage.id) {
+      if (lastMessage && lastMessage.role === RoleType.Assistant && lastMessage.id) {
         setHistoricalActivities((prev) => ({
           ...prev,
           [lastMessage.id!]: [...processedEventsTimeline],
@@ -58,25 +59,27 @@ export default function App() {
     (submittedInputValue: string, agentURL: string, eventInfo: (data: any) => any, queryExtraInfo: any) => {
       if (!submittedInputValue.trim()) return;
       setProcessedEventsTimeline([]);
-      setThinkingContent("");
+      // Reset thinking state for new request
       setIsThinking(false);
       hasFinalizeEventOccurredRef.current = false;
       // test the func
-      const getAnswer = async (inputQuery: UserQuery) => {
+      const getAnswer = async (inputQuery: Conversation) => {
         let message: string = "";
         let processedEvent: ProcessedEvent | null = null;
+        // Reset thinking content at the start of a new message
+        setThinkingContent("");
         const res = await getAgentResponse(inputQuery, agentURL);
         if ("error" in res) {
           // set the error message
           setChats((chats) => [
             ...(chats || []),
             {
-              type: "ai",
+              role: RoleType.System,
               content: res.error,
               id: Date.now().toString(),
             },
           ]);
-          console.error("No response from agent: ", res.error);
+          console.error("No response from assistant: ", res.error);
         } else { 
           const reader = res.body?.getReader();
           if (!reader) throw new Error("body is not available");
@@ -88,7 +91,7 @@ export default function App() {
             buffer += decoder.decode(value, {stream: true});
             setIsLoading(!done);
             if (done) break;
-            let lines = buffer.split("\n");
+            const lines = buffer.split("\n");
             buffer = lines.pop()!;
             for (const line of lines) {
               if (line !== ""){
@@ -113,34 +116,67 @@ export default function App() {
                   }
                 }
 
-                // Reset thinking content on final answer
+                // Handle tool results
+                if (data.stage === "tool_result") {
+                  // Add tool result to activity timeline
+                  const toolEvent = {
+                    title: `Tool: ${data.tool}`,
+                    data: `Result: ${data.result}`,
+                  };
+                  setProcessedEventsTimeline((prevEvents) => [
+                    ...prevEvents,
+                    toolEvent,
+                  ]);
+                }
+
+                // Handle tool errors
+                if (data.stage === "tool_error") {
+                  const errorEvent = {
+                    title: `Tool Error: ${data.tool}`,
+                    data: `Error: ${data.error}`,
+                  };
+                  setProcessedEventsTimeline((prevEvents) => [
+                    ...prevEvents,
+                    errorEvent,
+                  ]);
+                }
+
+                // Handle incremental content chunks
+                if (data.stage === "content") {
+                  if (data.response) {
+                    message += data.response;
+                    // Always update the last Assistant message or create new one
+                    setChats((chats) => {
+                      const lastMessage = chats[chats.length - 1];
+                      if (lastMessage && lastMessage.role === RoleType.Assistant){
+                        // Update existing Assistant message
+                        const updatedLastMessage = {
+                          ...lastMessage,
+                          content: message,
+                        };
+                        return [
+                          ...chats.slice(0, chats.length - 1),
+                          updatedLastMessage,
+                        ];
+                      } else {
+                        // Create new Assistant message
+                        return [
+                          ...chats,
+                          {
+                            role: RoleType.Assistant,
+                            content: message,
+                            id: Date.now().toString(),
+                          }
+                        ];
+                      }
+                    });
+                  }
+                }
+
+                // Handle finalize answer - end of a turn marker
                 if (data.stage === "finalize_answer") {
                   setIsThinking(false);
-                  hasFinalizeEventOccurredRef.current = true;
-                  message += data.response; 
-                  // detect if the last one is the ai or human
-                  setChats((chats) => {
-                    const lastMessage = chats[chats.length - 1];
-                    if (lastMessage.type !== "ai"){
-                      return [
-                        ...chats,
-                        {
-                          type: "ai",
-                          content: message,
-                          id: Date.now().toString(),
-                        }
-                      ];
-                    } else {
-                      const updatedLastMessage = {
-                        ...chats[chats.length - 1],
-                        content: message,
-                      };
-                      return [
-                        ...chats.slice(0, chats.length - 1),
-                        updatedLastMessage,
-                      ];
-                    }
-                  });
+                  // no-op for now; message has already been accumulated via content
                 }
               }
             }
@@ -148,26 +184,28 @@ export default function App() {
         }
       };
 
-      const newHumanMessage: Message = {
-        type: "human",
+      const newUserMessage: ChatMessage = {
+        role: RoleType.User,
         content: submittedInputValue,
         id: Date.now().toString(),
+        model: queryExtraInfo.reasoning_model
       }
 
       setChats((chats) => [
         ...(chats || []),
-        newHumanMessage,
+        newUserMessage,
       ]);
 
-      const newMessages: Message[] = [
+      const newMessages: ChatMessage[] = [
         ...(chatsRef.current || []),
-        newHumanMessage,
+        newUserMessage,
       ];
       
       // execute the func
       getAnswer({
+        id: Date.now(),
         messages: newMessages,
-        extra_info: queryExtraInfo,
+        // metadata: queryExtraInfo,
       });
     }, []
   );
