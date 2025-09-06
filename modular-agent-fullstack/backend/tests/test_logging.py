@@ -12,6 +12,7 @@ from unittest import mock
 from unittest.mock import Mock
 import logging.config
 
+
 class TestLogging(unittest.TestCase):
 
     @mock.patch("opentelemetry.exporter.otlp.proto.grpc._log_exporter.OTLPLogExporter")
@@ -22,7 +23,7 @@ class TestLogging(unittest.TestCase):
 
         # Now import your logging config - this will use the mocks
         # Import AFTER setting up mocks to ensure they're used
-        
+
         from src.agent.my_local_agent.logging_config import LOGGING_CONFIG
 
         # Apply the logging configuration

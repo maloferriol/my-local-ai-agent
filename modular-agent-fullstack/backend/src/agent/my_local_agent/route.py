@@ -14,11 +14,13 @@ from opentelemetry import trace
 from rich import print
 
 from .conversation import ConversationManager
-from .db import DatabaseManager, DatabaseUtils
 from .examples import get_weather, get_weather_conditions
 from .logging_config import LOGGING_CONFIG
 from .models import Conversation, Role
 import traceback
+
+
+from src.database.db import DatabaseManager, DatabaseUtils
 
 
 # Configure logging
@@ -360,15 +362,9 @@ async def _stream_chat_with_tools_refactored(
                 yield json.dumps({"stage": "finalize_answer"}) + "\n"
                 break  # No tools to call, so we're done.
 
-            print("HEEERRRRRRREEEEEE I AM")
-
             print(f"Executing {len(tool_calls_this_turn)} tool call(s)")
             # We have tools to call, so execute them and stream results.
             tool_executor = _execute_tools(tool_calls_this_turn, conv_manager)
-
-            print(
-                "HEEERRRRRRREEEEEE I AM =============================================================="
-            )
 
             async for tool_result in tool_executor:
                 yield json.dumps(tool_result) + "\n"
