@@ -23,8 +23,8 @@ class TestLogging(unittest.TestCase):
 
         # Now import your logging config - this will use the mocks
         # Import AFTER setting up mocks to ensure they're used
-
-        from src.agent.my_local_agent.logging_config import LOGGING_CONFIG
+        
+        from src.logging_config import LOGGING_CONFIG
 
         # Apply the logging configuration
         logging.config.dictConfig(LOGGING_CONFIG)
@@ -57,7 +57,7 @@ class TestLogging(unittest.TestCase):
         # Now import your logging config - this will use the mocks
         # Import AFTER setting up mocks to ensure they're used
         import logging.config
-        from src.agent.my_local_agent.logging_config import LOGGING_CONFIG
+        from src.logging_config import LOGGING_CONFIG
 
         # Apply the logging configuration
         logging.config.dictConfig(LOGGING_CONFIG)
@@ -93,7 +93,7 @@ class TestLogging(unittest.TestCase):
         # Now import your logging config - this will use the mocks
         # Import AFTER setting up mocks to ensure they're used
         import logging.config
-        from src.agent.my_local_agent.logging_config import LOGGING_CONFIG
+        from src.logging_config import LOGGING_CONFIG
 
         # Apply the logging configuration
         logging.config.dictConfig(LOGGING_CONFIG)
@@ -129,7 +129,7 @@ class TestLogging(unittest.TestCase):
         # Now import your logging config - this will use the mocks
         # Import AFTER setting up mocks to ensure they're used
         import logging.config
-        from src.agent.my_local_agent.logging_config import LOGGING_CONFIG
+        from src.logging_config import LOGGING_CONFIG
 
         # Apply the logging configuration
         logging.config.dictConfig(LOGGING_CONFIG)
