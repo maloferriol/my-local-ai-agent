@@ -35,7 +35,7 @@ class ConversationManager:
         conversation_logger.info("Conversation manager initialized")
 
     def start_new_conversation(self, model: str = None, title: str = None) -> int:
-        """
+        """_
         Start a new conversation.
 
         Args:
@@ -46,7 +46,9 @@ class ConversationManager:
             The conversation ID
         """
         # Create conversation in database
-        conversation_id = self.db_manager.create_conversation()
+        conversation_id = self.db_manager.create_conversation(title=title)
+
+        print(f"[CONV MANAGER] Created new conversation with ID: {conversation_id}")
 
         # Create conversation object
         now = datetime.now()
@@ -92,6 +94,9 @@ class ConversationManager:
 
         # Store in database
         step = self.current_conversation.get_message_count()
+        print("step", step)
+        conversation_id = (self.current_conversation.id,)
+        print("conversation_id", conversation_id)
         self.db_manager.insert_message(
             conversation_id=self.current_conversation.id,
             step=step,
@@ -180,7 +185,6 @@ class ConversationManager:
             )
 
         message = ChatMessage(
-            role="tool",
             role=Role.TOOL,
             content=content,
             timestamp=datetime.now(),
@@ -241,6 +245,7 @@ class ConversationManager:
         conversation_data = self.db_manager.get_conversation(conversation_id)
         if not conversation_data:
             conversation_logger.warning("Conversation %s not found", conversation_id)
+            print(f"Conversation {conversation_id} not found")
             return None
 
         # Create conversation object
@@ -261,7 +266,7 @@ class ConversationManager:
                 except json.JSONDecodeError:
                     conversation_logger.warning("Could not decode tool_calls JSON.")
             message = ChatMessage(
-                id=str(msg_data["id"]),
+                id=msg_data["id"],
                 role=Role(msg_data["role"]),
                 content=msg_data["content"],
                 timestamp=msg_data.get("timestamp", datetime.now()),

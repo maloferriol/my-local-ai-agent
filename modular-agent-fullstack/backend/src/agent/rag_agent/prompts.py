@@ -1,4 +1,4 @@
-""" store the prompt of RAG template """
+"""store the prompt of RAG template"""
 
 system_prompt = """
 You are a helpful assistant. Please answer the user's query using only the reference content provided below.
