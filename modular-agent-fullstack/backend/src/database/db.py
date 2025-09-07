@@ -14,7 +14,7 @@ tracer = trace.get_tracer(__name__)
 logger = logging.getLogger("db_sqlite_logger")
 
 project_root = Path(__file__).resolve().parent.parent.parent
-databases_dir = project_root / "databases"
+databases_dir = project_root / "data"
 os.makedirs(databases_dir, exist_ok=True)
 default_db_file = databases_dir / "conversation_data.db"
 
