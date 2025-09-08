@@ -18,6 +18,7 @@ databases_dir = project_root / "data"
 os.makedirs(databases_dir, exist_ok=True)
 default_db_file = databases_dir / "conversation_data.db"
 
+ERROR_CONNECTION_MESSAGE = "Not connected to database. Call connect() first."
 
 class DatabaseManager:
     def __init__(self, db_file=default_db_file):
@@ -46,7 +47,7 @@ class DatabaseManager:
         """Creates a table with the given schema."""
         try:
             if self.conn is None:
-                raise sqlite3.Error("Not connected to database. Call connect() first.")
+                raise sqlite3.Error(ERROR_CONNECTION_MESSAGE)
             self.cursor.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({schema})")
             logger.info("Table created: %s", table_name)
         except sqlite3.Error as e:
@@ -58,7 +59,7 @@ class DatabaseManager:
         logger.debug("Executing query: %s with params: %s", query, params)
         try:
             if self.conn is None:
-                raise sqlite3.Error("Not connected to database. Call connect() first.")
+                raise sqlite3.Error(ERROR_CONNECTION_MESSAGE)
             self.cursor.execute(query, params)
             self.conn.commit()  # Commit changes after executing
             return self.cursor.lastrowid  # Returns the ID of the last inserted row
@@ -76,7 +77,7 @@ class DatabaseManager:
         """Fetches all rows from a query."""
         try:
             if self.conn is None:
-                raise sqlite3.Error("Not connected to database. Call connect() first.")
+                raise sqlite3.Error()
             self.cursor.execute(query, params)
             rows = self.cursor.fetchall()
             if rows:
@@ -92,7 +93,7 @@ class DatabaseManager:
         """Fetches a single row from a query."""
         try:
             if self.conn is None:
-                raise sqlite3.Error("Not connected to database. Call connect() first.")
+                raise sqlite3.Error(ERROR_CONNECTION_MESSAGE)
             self.cursor.execute(query, params)
             row = self.cursor.fetchone()
             if row:
@@ -266,7 +267,7 @@ class DatabaseManager:
         """Drops the specified table."""
         try:
             if self.conn is None:
-                raise sqlite3.Error("Not connected to database. Call connect() first.")
+                raise sqlite3.Error(ERROR_CONNECTION_MESSAGE)
             self.cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
             self.conn.commit()
             logger.info("Dropped table: %s", table_name)
@@ -286,8 +287,8 @@ class DatabaseManager:
             conversation_id = self.execute_query(
                 "INSERT INTO conversations (title) VALUES (?)", (random_title,)
             )
-            # logger.info("Created new conversation with ID: %s", conversation_id)
-            # logger.info("Created new conversation with title: %s", random_title)
+            logger.info("Created new conversation with ID: %s", conversation_id)
+            logger.info("Created new conversation with title: %s", random_title)
             print(random_title)
             print("[DB] conv id", conversation_id)
             return conversation_id
@@ -295,14 +296,13 @@ class DatabaseManager:
             logger.error("Error creating conversation: %s", e)
             print("[DB] Error creating conversation:", e)
             raise
-            # return None
         except Exception as e:
             print("[DB] Error creating conversation:", e)
             raise
 
 
 class DatabaseUtils:
-    def generate_random_name(n: int = 3) -> str:
+    def generate_random_name(self, n: int = 3) -> str:
         """
         Generates a random name by sampling n words from the nltk words corpus.
 

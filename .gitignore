@@ -227,3 +227,6 @@ cython_debug/
 backend/.langgraph_api
 
 .ruff_cache
+
+# Ignore VS Code extensions
+.continue
