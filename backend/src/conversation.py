@@ -14,6 +14,7 @@ from src.models import Conversation, ChatMessage, Role
 
 conversation_logger = logging.getLogger("conversations_logger")
 
+NO_ACTIVE_CONVERSATION_MESSAGE = "No active conversation. Call start_new_conversation() first."
 
 class ConversationManager:
     """
@@ -81,9 +82,7 @@ class ConversationManager:
             The created message object
         """
         if not self.current_conversation:
-            raise RuntimeError(
-                "No active conversation. Call start_new_conversation() first."
-            )
+            raise RuntimeError(NO_ACTIVE_CONVERSATION_MESSAGE)
 
         message = ChatMessage(
             role=Role.USER, content=content, timestamp=datetime.now(), model=model
@@ -131,9 +130,7 @@ class ConversationManager:
             The created message object
         """
         if not self.current_conversation:
-            raise RuntimeError(
-                "No active conversation. Call start_new_conversation() first."
-            )
+            raise RuntimeError(NO_ACTIVE_CONVERSATION_MESSAGE)
 
         message = ChatMessage(
             role=Role.ASSISTANT,
@@ -180,9 +177,7 @@ class ConversationManager:
             The created message object
         """
         if not self.current_conversation:
-            raise RuntimeError(
-                "No active conversation. Call start_new_conversation() first."
-            )
+            raise RuntimeError(NO_ACTIVE_CONVERSATION_MESSAGE)
 
         message = ChatMessage(
             role=Role.TOOL,
