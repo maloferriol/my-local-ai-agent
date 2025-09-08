@@ -1,0 +1,52 @@
+{
+  "mcpServers": {
+	  "sequentialthinking": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "mcp/sequentialthinking"
+      ]
+    },
+    // https://github.com/upstash/context7
+    "context7": {
+      "httpUrl": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "YOUR_API_KEY",
+        "Accept": "application/json, text/event-stream"
+      }
+    }
+    "sonarqube": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "SONARQUBE_TOKEN",
+        "-e",
+        "SONARQUBE_ORG",
+        "mcp/sonarqube"
+      ],
+      "env": {
+        "SONARQUBE_TOKEN": <token>,
+        "SONARQUBE_ORG": <org>
+      },
+      "type": "stdio"
+    },
+    "augments": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "<path to the >",
+        "augments-mcp-server"
+      ],
+      "env": {
+        "AUGMENTS_CACHE_DIR": "~/.cache/augments-mcp-server",
+        "GITHUB_TOKEN": "<token>"
+      }
+    }
+  }
+}
