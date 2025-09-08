@@ -109,12 +109,13 @@ const eventInfo = (data: StreamEventData) => {
       titleDetails = "Finalizing the Answers";
       extraInfo = "Composing and presenting the final answer.";
       break;
-    case "rag_search":
-      const chunks = Array.isArray(data.metadata) ? data.metadata : [];
-      const numChunks = chunks.length;
-      titleDetails = "Search Knowledge Base Using RAG";
-      extraInfo = `Gathered ${numChunks} chunks from RAG Database.`;
-      break;
+    case "rag_search": {
+        const chunks = Array.isArray(data.metadata) ? data.metadata : [];
+        const numChunks = chunks.length;
+        titleDetails = "Search Knowledge Base Using RAG";
+        extraInfo = `Gathered ${numChunks} chunks from RAG Database.`;
+        break;
+      }
     case "reasoning":
       titleDetails = "Reasoning with Retrieved Information";
       extraInfo = "Analyzing and synthesizing information from retrieved chunks.";

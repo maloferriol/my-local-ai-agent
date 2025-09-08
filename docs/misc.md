@@ -23,7 +23,23 @@ git push -u origin main       # Push to remote
 docker run -p 6006:6006 -p 4319:4317 -i -t arizephoenix/phoenix:latest
 ```
 
-## 4. Run All Tests
+## 
 
-```bash
-python -m
+
+sl web 
+
+black .
+
+pip3 install -r requirements.txt
+
+pytest
+
+flake8 ./backend/src
+
+pytest --cov=.
+
+docker-compose -f docker-compose.dev.yml up -d
+
+docker ps -a
+
+lsof -i tcp:3000

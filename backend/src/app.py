@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# from src.agent.gemini_agent.graph import app as gemini_agent_app
-# from src.agent.rag_agent.rag import app as rag_agent_app
 from src.agent.my_local_agent.route import app as my_local_agent_app
 
 # Define the FastAPI app
@@ -17,9 +15,4 @@ app.add_middleware(
 )
 
 # mount the app
-# app.mount("/agent/gemini_agent", gemini_agent_app)
-# app.mount("/agent/rag_agent", rag_agent_app)
-app.mount("/agent/my_local_agent", my_local_agent_app)
-
-
 app.mount("/agent/my_local_agent", my_local_agent_app)
