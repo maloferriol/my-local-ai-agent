@@ -1,12 +1,12 @@
-import type { ChatMessage } from "@/lib/types";
-import {RoleType}  from "@/lib/types";
+import type { ChatMessage, Conversation } from "@/lib/types";
+import { RoleType } from "@/lib/types";
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ProcessedEvent } from "@/components/ActivityTimeline";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { ChatMessagesView } from "@/components/ChatMessagesView";
 import { getAgentResponse, getConversation } from "@/lib/apis/agent";
-import { Conversation } from "@/lib/types";
 import { useSelectedAgent } from "@/hooks/useSelectedAgent";
 
 export default function App() {
