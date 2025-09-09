@@ -13,6 +13,7 @@ from openinference.semconv.trace import SpanAttributes
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind
 from opentelemetry.trace.status import Status, StatusCode
+from opentelemetry.context import get_current
 
 from rich import print
 
@@ -85,9 +86,7 @@ async def get_conversation(conversation_id: int):
         db_manager.connect()
         db_manager.create_init_tables()
 
-    print(
-        "/conversation/"
-    )
+    print("/conversation/")
     print("==========================================================================")
 
     conv_manager = ConversationManager(db_manager)
@@ -291,6 +290,7 @@ async def _execute_tools(
 async def _stream_chat_with_tools_refactored(  # noqa: C901
     model: str,
     conv_manager: ConversationManager,
+    parent_ctx,
 ):
     """
     Orchestrates streaming chat responses with tool execution.
@@ -304,6 +304,7 @@ async def _stream_chat_with_tools_refactored(  # noqa: C901
     with tracer.start_as_current_span(
         "streaming_chat_orchestration",
         attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+        context=parent_ctx,
     ) as span:
 
         # Model-specific setup
@@ -377,7 +378,10 @@ async def _stream_chat_with_tools_refactored(  # noqa: C901
 
                 print(f"Executing {len(tool_calls_this_turn)} tool call(s)")
                 # We have tools to call, so execute them and stream results.
-                tool_executor = _execute_tools(tool_calls_this_turn, conv_manager)
+                tool_executor = _execute_tools(
+                    tool_calls_this_turn,
+                    conv_manager,
+                )
 
                 async for tool_result in tool_executor:
                     yield json.dumps(tool_result) + "\n"
@@ -400,10 +404,6 @@ async def _stream_chat_with_tools_refactored(  # noqa: C901
 
 
 @app.post("/invoke")
-@tracer.start_as_current_span(
-    name="invoke",
-    attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
-)
 async def invoke(conversation: Conversation):
     """
     Handle user queries by streaming responses from Ollama.
@@ -414,57 +414,59 @@ async def invoke(conversation: Conversation):
     Returns:
         StreamingResponse containing chat responses and tool execution results
     """
-    current_span = trace.get_current_span()
-    try:
-        logger.info("Received chat")
-        print("Received chat", conversation)
+    with tracer.start_as_current_span(
+        "invoke",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    ) as span:
+        try:
+            logger.info("Received chat")
+            print("Received chat", conversation)
 
-        msg_count = len(conversation.messages) if conversation.messages else 0
-        print(f"Received chat request with {msg_count} messages")
+            msg_count = len(conversation.messages) if conversation.messages else 0
+            print(f"Received chat request with {msg_count} messages")
 
-        # current_span.set_attribute(
-        #     "llm.input_messages",
-        #     json.dumps([msg.to_dict() for msg in conversation.messages])
-        # )
+        except Exception as e:
+            print_trace(e)
+            print("Error e:", e)
 
-    except Exception as e:
-        print_trace(e)
-        print("Error e:", e)
+        if db_manager.conn is None:
+            db_manager.connect()
+            db_manager.create_init_tables()
 
-    if db_manager.conn is None:
-        db_manager.connect()
-        db_manager.create_init_tables()
+        conv_manager = ConversationManager(db_manager, conversation)
 
-    conv_manager = ConversationManager(db_manager, conversation)
+        user_message = conversation.messages[-1] if conversation.messages else None
 
-    user_message = conversation.messages[-1] if conversation.messages else None
+        if not user_message:
+            # Handle case with no messages
+            error_response = {
+                "stage": "error",
+                "response": "Query contains no messages.",
+            }
+            return StreamingResponse(
+                iter([json.dumps(error_response) + "\n"]),
+                media_type="text/plain",
+            )
 
-    if not user_message:
-        # Handle case with no messages
-        error_response = {"stage": "error", "response": "Query contains no messages."}
-        return StreamingResponse(
-            iter([json.dumps(error_response) + "\n"]),
-            media_type="text/plain",
-        )
+        model = user_message.model or "gpt-oss:20b"  # Default model
+        span.set_attribute("llm.model_name", model)
 
-    model = user_message.model or "gpt-oss:20b"  # Default model
-    current_span.set_attribute("llm.model_name", model)
-
-    try:
-        return StreamingResponse(
-            _stream_chat_with_tools_refactored(model, conv_manager),
-            media_type="text/plain",
-        )
-    except Exception as e:
-        print_trace(e)
-        print(f"FAIL StreamingResponse creation error: {e}")
-        logger.error(f"Failed to create StreamingResponse: {e}")
-        # Return error response
-        error_response = {
-            "stage": "error",
-            "response": f"Response creation error: {str(e)}",
-        }
-        return StreamingResponse(
-            iter([json.dumps(error_response) + "\n"]),
-            media_type="text/plain",
-        )
+        try:
+            parent_ctx = get_current()
+            return StreamingResponse(
+                _stream_chat_with_tools_refactored(model, conv_manager, parent_ctx),
+                media_type="text/plain",
+            )
+        except Exception as e:
+            print_trace(e)
+            print(f"FAIL StreamingResponse creation error: {e}")
+            logger.error(f"Failed to create StreamingResponse: {e}")
+            # Return error response
+            error_response = {
+                "stage": "error",
+                "response": f"Response creation error: {str(e)}",
+            }
+            return StreamingResponse(
+                iter([json.dumps(error_response) + "\n"]),
+                media_type="text/plain",
+            )
