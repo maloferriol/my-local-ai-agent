@@ -28,11 +28,31 @@ class DatabaseManager:
         self.conn = None  # Connection object
         self.cursor = None  # Cursor object
 
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     @tracer.start_as_current_span("connect_to_db", kind=trace.SpanKind.INTERNAL)
     def connect(self):
         try:
-            self.conn = sqlite3.connect(self.db_file)
+            self.conn = sqlite3.connect(
+                self.db_file,
+                timeout=5.0,
+                check_same_thread=False,
+            )
             self.cursor = self.conn.cursor()
+            try:
+                # Improve concurrency and reliability
+                self.cursor.execute("PRAGMA journal_mode=WAL;")
+                self.cursor.execute("PRAGMA synchronous=NORMAL;")
+                self.cursor.execute("PRAGMA busy_timeout=5000;")
+                self.cursor.execute("PRAGMA foreign_keys=ON;")
+            except Exception:
+                # Best-effort PRAGMA setup; continue even if not supported
+                pass
             logger.info("Connected to database: %s", self.db_file)
         except sqlite3.Error as e:
             logger.error("Error connecting to database: %s", e)

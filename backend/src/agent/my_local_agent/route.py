@@ -1,5 +1,3 @@
-"""Module for handling Ollama chat interactions and tool execution."""
-
 import json
 import logging.config
 from contextlib import asynccontextmanager
@@ -33,9 +31,6 @@ logger = logging.getLogger(__name__)
 # Initialize tracer
 tracer = trace.get_tracer(__name__)
 
-# Initialize DatabaseManager
-db_manager = DatabaseManager()
-
 
 def print_trace(ex: BaseException):
     print("".join(traceback.TracebackException.from_exception(ex).format()))
@@ -52,17 +47,29 @@ except Exception as e:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage database connection lifecycle."""
-    print("Initializing database connection...")
-    db_manager.connect()
-    db_manager.create_init_tables()
-    logger.info("Database connected and tables created.")
+    """
+    Manage application startup and shutdown events.
+    """
+    print("Application startup: Ensuring database tables exist...")
+    db = DatabaseManager()
+    try:
+        db.connect()
+        db.create_init_tables()
+        logger.info("Database tables verified.")
+    finally:
+        db.close()
     yield
-    db_manager.close()
-    logger.info("Database connection closed.")
+    # On shutdown, you can add cleanup logic if needed
+    print("Application shutdown.")
 
 
-app = FastAPI(lifespan=lifespan)
+# This dependency provides a new, unconnected DatabaseManager instance.
+# Per-write DB model: routes do not own or inject DB connections
+
+
+app = FastAPI(
+    lifespan=lifespan,
+)
 
 available_tools_default = {
     "get_weather": get_weather,
@@ -72,7 +79,9 @@ available_tools_default = {
 
 @app.get("/conversation/{conversation_id}", response_model=Conversation)
 @tracer.start_as_current_span(name="get_conversation", kind=SpanKind.INTERNAL)
-async def get_conversation(conversation_id: int):
+async def get_conversation(
+    conversation_id: int,
+):
     """
     Fetch a conversation by its ID.
 
@@ -82,25 +91,13 @@ async def get_conversation(conversation_id: int):
     Returns:
         The conversation object.
     """
-    if db_manager.conn is None:
-        db_manager.connect()
-        db_manager.create_init_tables()
-
     print("/conversation/")
     print("==========================================================================")
-
-    conv_manager = ConversationManager(db_manager)
-    try:
-        # The load_conversation method returns a Conversation object or None
-        conversation = conv_manager.load_conversation(conversation_id)
-        if conversation:
-            # The response_model will handle the serialization
-            return conversation
-        else:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-    except Exception as e:
-        logger.error(f"Error fetching conversation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    conv_manager = ConversationManager.load_existing(conversation_id)
+    if conv_manager:
+        return conv_manager.get_current_conversation()
+    else:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
 
 async def _stream_model_response(  # noqa: C901
@@ -400,11 +397,12 @@ async def _stream_chat_with_tools_refactored(  # noqa: C901
                 }
                 yield json.dumps(error_response) + "\n"
                 raise
-                break  # Exit the loop on critical error
 
 
 @app.post("/invoke")
-async def invoke(conversation: Conversation):
+async def invoke(
+    conversation: Conversation,
+):
     """
     Handle user queries by streaming responses from Ollama.
 
@@ -418,35 +416,31 @@ async def invoke(conversation: Conversation):
         "invoke",
         attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
     ) as span:
-        try:
-            logger.info("Received chat")
-            print("Received chat", conversation)
-
-            msg_count = len(conversation.messages) if conversation.messages else 0
-            print(f"Received chat request with {msg_count} messages")
-
-        except Exception as e:
-            print_trace(e)
-            print("Error e:", e)
-
-        if db_manager.conn is None:
-            db_manager.connect()
-            db_manager.create_init_tables()
-
-        conv_manager = ConversationManager(db_manager, conversation)
+        logger.info(
+            "Received chat request with %d messages",
+            len(conversation.messages) if conversation.messages else 0,
+        )
 
         user_message = conversation.messages[-1] if conversation.messages else None
-
         if not user_message:
-            # Handle case with no messages
-            error_response = {
-                "stage": "error",
-                "response": "Query contains no messages.",
-            }
-            return StreamingResponse(
-                iter([json.dumps(error_response) + "\n"]),
-                media_type="text/plain",
+            raise HTTPException(status_code=400, detail="Query contains no messages.")
+
+        if conversation.id == 0:
+            # Create a new conversation
+            conv_manager = ConversationManager.create_new(model=user_message.model)
+        else:
+            # Load existing conversation
+            conv_manager = ConversationManager.load_existing(
+                conversation.id,
             )
+
+        if not conv_manager:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        # Add the user's new message to the conversation state
+        conv_manager.add_user_message(
+            content=user_message.content, model=user_message.model
+        )
 
         model = user_message.model or "gpt-oss:20b"  # Default model
         span.set_attribute("llm.model_name", model)
