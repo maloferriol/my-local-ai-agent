@@ -16,13 +16,14 @@ conversation_logger = logging.getLogger("conversations_logger")
 
 NO_ACTIVE_CONVERSATION_MESSAGE = "No active conversation. Call start_new_conversation() first."
 
+
 class ConversationManager:
     """
     Manages conversation lifecycle, state, and persistence.
     Provides high-level operations for conversation management.
     """
 
-    def __init__(self, db_manager):
+    def __init__(self, db_manager, init_conversation: Conversation = None):
         """
         Initialize the conversation manager.
 
@@ -30,7 +31,7 @@ class ConversationManager:
             db_manager: Database manager instance for persistence
         """
         self.db_manager = db_manager
-        self.current_conversation: Optional[Conversation] = None
+        self.current_conversation: Optional[Conversation] = init_conversation
         self.conversation_history: List[Conversation] = []
 
         conversation_logger.info("Conversation manager initialized")

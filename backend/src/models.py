@@ -31,8 +31,14 @@ class ChatMessage:
         data = asdict(self)
         if isinstance(data.get("role"), Enum):
             data["role"] = data["role"].value
+
+        # if isinstance(data.get("timestamp"), datetime):
+        #     # here seriallize datetime
+        #     data["timestamp"] = data["timestamp"].timestamp
         # Filter out None values for cleaner API payloads
-        return {k: v for k, v in data.items() if v is not None}
+        res = {k: v for k, v in data.items() if v is not None}
+        print('res', res)
+        return res
 
 
 @dataclass
