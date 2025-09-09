@@ -6,15 +6,24 @@ Handles conversation state, history, metadata, and persistence.
 import json
 import logging
 
+from openinference.semconv.trace import SpanAttributes
+from opentelemetry import trace
+
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from src.models import Conversation, ChatMessage, Role
 
 
+# Initialize tracer
+tracer = trace.get_tracer(__name__)
+
+# Initialize logging
 conversation_logger = logging.getLogger("conversations_logger")
 
-NO_ACTIVE_CONVERSATION_MESSAGE = "No active conversation. Call start_new_conversation() first."
+NO_ACTIVE_CONVERSATION_MESSAGE = (
+    "No active conversation. Call start_new_conversation() first."
+)
 
 
 class ConversationManager:
@@ -23,19 +32,56 @@ class ConversationManager:
     Provides high-level operations for conversation management.
     """
 
-    def __init__(self, db_manager, init_conversation: Conversation = None):
+    @tracer.start_as_current_span(
+        name="ConversationManager__init__",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
+    def __init__(self, db_manager, conversation: Conversation = None):
         """
         Initialize the conversation manager.
 
+        This method will either load an existing conversation or create a new one
+        based on the provided conversation object.
+
         Args:
-            db_manager: Database manager instance for persistence
+            db_manager: Database manager instance for persistence.
+            conversation: An optional Conversation object from the request.
         """
         self.db_manager = db_manager
-        self.current_conversation: Optional[Conversation] = init_conversation
+        self.current_conversation: Optional[Conversation] = None
         self.conversation_history: List[Conversation] = []
 
         conversation_logger.info("Conversation manager initialized")
 
+        if conversation and conversation.id:
+            self.load_conversation(conversation.id)
+
+        print("CONVERSATION", conversation)
+        print("self.current_conversation", self.current_conversation)
+
+        if not self.current_conversation:
+            self.start_new_conversation()
+
+        # Add the new user message to the conversation state
+        if conversation and conversation.messages:
+            user_message = conversation.messages[-1]
+            if user_message.role == Role.USER:
+                # Check if the message is already in the conversation to avoid duplicates
+                if not self.current_conversation.messages or (
+                    self.current_conversation.messages
+                    and not any(
+                        m.content == user_message.content
+                        for m in self.current_conversation.messages
+                    )
+                ):
+                    self.add_user_message(
+                        content=user_message.content, model=user_message.model
+                    )
+
+    @tracer.start_as_current_span(
+        name="ConversationManager__start_new_conversation",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def start_new_conversation(self, model: str = None, title: str = None) -> int:
         """_
         Start a new conversation.
@@ -71,6 +117,10 @@ class ConversationManager:
         )
         return conversation_id
 
+    @tracer.start_as_current_span(
+        name="ConversationManager__add_user_message",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def add_user_message(self, content: str, model: str = None) -> ChatMessage:
         """
         Add a user message to the current conversation.
@@ -111,6 +161,10 @@ class ConversationManager:
         )
         return message
 
+    @tracer.start_as_current_span(
+        name="ConversationManager__add_assistant_message",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def add_assistant_message(
         self,
         content: str,
@@ -131,6 +185,7 @@ class ConversationManager:
             The created message object
         """
         if not self.current_conversation:
+            print("No active conversation", NO_ACTIVE_CONVERSATION_MESSAGE)
             raise RuntimeError(NO_ACTIVE_CONVERSATION_MESSAGE)
 
         message = ChatMessage(
@@ -163,6 +218,10 @@ class ConversationManager:
         )
         return message
 
+    @tracer.start_as_current_span(
+        name="ConversationManager__add_user_message",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def add_tool_message(
         self, content: str, tool_name: str, model: str = None
     ) -> ChatMessage:
@@ -209,10 +268,18 @@ class ConversationManager:
         )
         return message
 
+    @tracer.start_as_current_span(
+        name="ConversationManager__get_current_conversation",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def get_current_conversation(self) -> Optional[Conversation]:
         """Get the current active conversation."""
         return self.current_conversation
 
+    @tracer.start_as_current_span(
+        name="ConversationManager__get_conversation_history",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def get_conversation_history(self, limit: int = None) -> List[Conversation]:
         """
         Get conversation history.
@@ -227,6 +294,10 @@ class ConversationManager:
             return self.conversation_history[-limit:]
         return self.conversation_history.copy()
 
+    @tracer.start_as_current_span(
+        name="ConversationManager__load_conversation",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def load_conversation(self, conversation_id: int) -> Optional[Conversation]:
         """
         Load a specific conversation by ID.
@@ -283,6 +354,10 @@ class ConversationManager:
         )
         return conversation
 
+    @tracer.start_as_current_span(
+        name="ConversationManager__update_conversation_title",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def update_conversation_title(self, title: str):
         """
         Update the title of the current conversation.
@@ -304,6 +379,10 @@ class ConversationManager:
 
         conversation_logger.info("Updated conversation title to: %s", title)
 
+    @tracer.start_as_current_span(
+        name="ConversationManager__get_conversation_summary",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def get_conversation_summary(self) -> Dict[str, Any]:
         """
         Get a summary of the current conversation.
@@ -328,6 +407,10 @@ class ConversationManager:
             ),
         }
 
+    @tracer.start_as_current_span(
+        name="ConversationManager__export_conversation",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def export_conversation(self, conversation_id: int = None) -> Dict[str, Any]:
         """
         Export a conversation to a dictionary format.
@@ -349,6 +432,10 @@ class ConversationManager:
 
         return conversation.to_dict()
 
+    @tracer.start_as_current_span(
+        name="ConversationManager__close_conversation",
+        attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
+    )
     def close_conversation(self):
         """Close the current conversation."""
         if self.current_conversation:

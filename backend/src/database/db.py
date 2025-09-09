@@ -20,7 +20,9 @@ default_db_file = databases_dir / "conversation_data.db"
 
 ERROR_CONNECTION_MESSAGE = "Not connected to database. Call connect() first."
 
+
 class DatabaseManager:
+    @tracer.start_as_current_span("database__init__", kind=trace.SpanKind.INTERNAL)
     def __init__(self, db_file=default_db_file):
         self.db_file = db_file
         self.conn = None  # Connection object
@@ -289,7 +291,7 @@ class DatabaseManager:
             )
             logger.info("Created new conversation with ID: %s", conversation_id)
             logger.info("Created new conversation with title: %s", random_title)
-            print(random_title)
+            print("random_title", random_title)
             print("[DB] conv id", conversation_id)
             return conversation_id
         except sqlite3.Error as e:
@@ -302,6 +304,7 @@ class DatabaseManager:
 
 
 class DatabaseUtils:
+    @tracer.start_as_current_span("generate_random_name", kind=trace.SpanKind.INTERNAL)
     def generate_random_name(self, n: int = 3) -> str:
         """
         Generates a random name by sampling n words from the nltk words corpus.
