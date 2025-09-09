@@ -53,6 +53,9 @@ span_processor = BatchSpanProcessor(otlp_exporter)
 trace.get_tracer_provider().add_span_processor(span_processor)
 
 
+FILE_HANDLER_CLASS = "logging.FileHandler"
+
+
 LOGGING_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -66,25 +69,25 @@ LOGGING_CONFIG = {
             "logger_provider": log_provider,
         },
         "app_file_handler": {
-            "class": "logging.FileHandler",
+            "class": FILE_HANDLER_CLASS,
             "formatter": "standard",
             "filename": app_log_path,
             "level": "DEBUG",
         },
         "conversations_file_handler": {
-            "class": "logging.FileHandler",
+            "class": FILE_HANDLER_CLASS,
             "formatter": "standard",
             "filename": conversations_log_path,
             "level": "DEBUG",
         },
         "db_sqlite_file_handler": {
-            "class": "logging.FileHandler",
+            "class": FILE_HANDLER_CLASS,
             "formatter": "standard",
             "filename": db_sqlite_log_path,
             "level": "DEBUG",
         },
         "tools_file_handler": {
-            "class": "logging.FileHandler",
+            "class": FILE_HANDLER_CLASS,
             "formatter": "standard",
             "filename": tools_log_path,
             "level": "DEBUG",
