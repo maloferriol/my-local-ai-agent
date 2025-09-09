@@ -393,26 +393,27 @@ async def _stream_chat_with_tools_refactored(
     name="invoke",
     attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
 )
-async def invoke(query: Conversation):
+async def invoke(conversation: Conversation):
     """
     Handle user queries by streaming responses from Ollama.
 
     Args:
-        query: UserQuery object containing messages and model configuration
+        conversation: UserQuery object containing messages and model configuration
 
     Returns:
         StreamingResponse containing chat responses and tool execution results
     """
     try:
         logger.info("Received chat")
-        print("Received chat", query)
+        print("Received chat", conversation)
 
-        msg_count = len(query.messages) if query.messages else 0
+        msg_count = len(conversation.messages) if conversation.messages else 0
         print(f"Received chat request with {msg_count} messages")
 
         current_span = trace.get_current_span()
         current_span.set_attribute(
-            "llm.input_messages", json.dumps([msg.to_dict() for msg in query.messages])
+            "llm.input_messages",
+            json.dumps([msg.to_dict() for msg in conversation.messages])
         )
 
     except Exception as e:
@@ -423,7 +424,8 @@ async def invoke(query: Conversation):
         db_manager.connect()
         db_manager.create_init_tables()
 
-    conv_manager = ConversationManager(db_manager)
+    conv_manager = ConversationManager(db_manager, conversation)
+    print("conv_manager.current_conversation", conv_manager.current_conversation)
     if conv_manager.current_conversation:
         conversation_id = conv_manager.current_conversation.id
         if conversation_id == 0:
@@ -431,7 +433,7 @@ async def invoke(query: Conversation):
     else:
         conversation_id = None
 
-    user_message = query.messages[-1] if query.messages else None
+    user_message = conversation.messages[-1] if conversation.messages else None
 
     if not user_message:
         # Handle case with no messages
