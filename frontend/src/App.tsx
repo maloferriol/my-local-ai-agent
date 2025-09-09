@@ -78,6 +78,23 @@ export default function App() {
     }
   }, [chats, isLoading, processedEventsTimeline]);
 
+  // Helper: Build a Conversation payload that includes only the latest user message
+  const buildLatestOnlyConversation = useCallback(
+    (idParam: string | undefined, newUserMessage: ChatMessage): Conversation => {
+      const trimmedContent = (newUserMessage.content ?? "").trim();
+      return {
+        id: idParam ? parseInt(idParam, 10) : 0,
+        messages: [
+          {
+            ...newUserMessage,
+            content: trimmedContent,
+          },
+        ],
+      };
+    },
+    []
+  );
+
   const handleSubmit = useCallback(
     (submittedInputValue: string, agentURL: string, eventInfo: (data: any) => any, queryExtraInfo: any) => {
 
@@ -90,6 +107,7 @@ export default function App() {
       hasFinalizeEventOccurredRef.current = false;
       // test the func
       const getAnswer = async (inputQuery: Conversation) => {
+        console.log("inputQuery", inputQuery)
         let message: string = "";
         let processedEvent: ProcessedEvent | null = null;
         // Reset thinking content at the start of a new message
@@ -227,17 +245,9 @@ export default function App() {
         newUserMessage,
       ]);
 
-      const newMessages: ChatMessage[] = [
-        ...(chatsRef.current || []),
-        newUserMessage,
-      ];
-      
-      // execute the func
-      getAnswer({
-        id: conversationId ? parseInt(conversationId, 10) : 0,
-        messages: newMessages,
-        // metadata: queryExtraInfo,
-      });
+      // execute the func with only the latest user message
+      const latestOnlyPayload = buildLatestOnlyConversation(conversationId, newUserMessage);
+      getAnswer(latestOnlyPayload);
     }, [isLoading, conversationId, navigate]
   );
 
