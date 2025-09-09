@@ -230,3 +230,4 @@ backend/.langgraph_api
 
 # Ignore VS Code extensions
 .continue
+.gemini/settings.json
