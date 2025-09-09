@@ -37,7 +37,7 @@ class ChatMessage:
         #     data["timestamp"] = data["timestamp"].timestamp
         # Filter out None values for cleaner API payloads
         res = {k: v for k, v in data.items() if v is not None}
-        print('res', res)
+        print("res", res)
         return res
 
 
