@@ -143,7 +143,13 @@ class DatabaseManager:
                     tool_calls TEXT,
                     tool_results TEXT,
                     model TEXT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    confidence_score REAL,
+                    token_count INTEGER,
+                    processing_time_ms INTEGER,
+                    metadata TEXT,
+                    parent_message_id INTEGER REFERENCES messages(id),
+                    uuid TEXT
                 """,
             )
 
@@ -152,11 +158,75 @@ class DatabaseManager:
                 """
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    model_name TEXT,
+                    system_prompt TEXT,
+                    temperature REAL DEFAULT 0.7,
+                    max_tokens INTEGER,
+                    metadata TEXT,
+                    uuid TEXT
                 """,
             )
+            
+            # Apply backward-compatible schema updates
+            self.apply_schema_migrations()
         except Exception as e:
             logger.exception("Error creating initial tables: %s", e)
+
+    @tracer.start_as_current_span("apply_schema_migrations", kind=trace.SpanKind.INTERNAL)
+    def apply_schema_migrations(self):
+        """Apply backward-compatible schema migrations for existing databases."""
+        try:
+            # Get existing columns for conversations table
+            existing_conv_columns = self._get_table_columns("conversations")
+            conv_columns = {col[1] for col in existing_conv_columns}
+            
+            # Add new conversation columns if they don't exist
+            new_conv_columns = [
+                ("model_name", "TEXT"),
+                ("system_prompt", "TEXT"), 
+                ("temperature", "REAL DEFAULT 0.7"),
+                ("max_tokens", "INTEGER"),
+                ("metadata", "TEXT"),
+                ("uuid", "TEXT")
+            ]
+            
+            for col_name, col_type in new_conv_columns:
+                if col_name not in conv_columns:
+                    self.cursor.execute(f"ALTER TABLE conversations ADD COLUMN {col_name} {col_type}")
+                    logger.info(f"Added column {col_name} to conversations table")
+
+            # Get existing columns for messages table  
+            existing_msg_columns = self._get_table_columns("messages")
+            msg_columns = {col[1] for col in existing_msg_columns}
+            
+            # Add new message columns if they don't exist
+            new_msg_columns = [
+                ("confidence_score", "REAL"),
+                ("token_count", "INTEGER"),
+                ("processing_time_ms", "INTEGER"), 
+                ("metadata", "TEXT"),
+                ("parent_message_id", "INTEGER REFERENCES messages(id)"),
+                ("uuid", "TEXT")
+            ]
+            
+            for col_name, col_type in new_msg_columns:
+                if col_name not in msg_columns:
+                    self.cursor.execute(f"ALTER TABLE messages ADD COLUMN {col_name} {col_type}")
+                    logger.info(f"Added column {col_name} to messages table")
+                    
+            self.conn.commit()
+            
+        except sqlite3.Error as e:
+            logger.warning(f"Schema migration error (may be expected for new databases): {e}")
+
+    def _get_table_columns(self, table_name: str):
+        """Get column information for a table."""
+        try:
+            self.cursor.execute(f"PRAGMA table_info({table_name})")
+            return self.cursor.fetchall()
+        except sqlite3.Error:
+            return []
 
     @tracer.start_as_current_span("insert_message", kind=trace.SpanKind.INTERNAL)
     def insert_message(
@@ -170,6 +240,13 @@ class DatabaseManager:
         tool_results: str = "",
         model: str = "",
         tool_name: str = "",
+        # New Phase 1 parameters
+        confidence_score: float = None,
+        token_count: int = None,
+        processing_time_ms: int = None,
+        metadata: str = "",
+        parent_message_id: int = None,
+        uuid: str = None,
     ):
         """Inserts a message into the messages table."""
         try:
@@ -197,9 +274,15 @@ class DatabaseManager:
                     tool_name,
                     tool_calls,
                     tool_results,
-                    model
+                    model,
+                    confidence_score,
+                    token_count,
+                    processing_time_ms,
+                    metadata,
+                    parent_message_id,
+                    uuid
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     conversation_id,
@@ -211,6 +294,12 @@ class DatabaseManager:
                     tool_calls,
                     tool_results,
                     model,
+                    confidence_score,
+                    token_count,
+                    processing_time_ms,
+                    metadata,
+                    parent_message_id,
+                    uuid,
                 ),
             )
             logger.info(
@@ -300,6 +389,12 @@ class DatabaseManager:
     def create_conversation(
         self,
         title: str = "",
+        model_name: str = None,
+        system_prompt: str = None,
+        temperature: float = 0.7,
+        max_tokens: int = None,
+        metadata: str = "",
+        uuid: str = None,
     ) -> int:
         """Creates a new conversation and returns its ID."""
         try:
@@ -307,7 +402,10 @@ class DatabaseManager:
                 title if title != "" else DatabaseUtils.generate_random_name(3)
             )
             conversation_id = self.execute_query(
-                "INSERT INTO conversations (title) VALUES (?)", (random_title,)
+                """INSERT INTO conversations 
+                   (title, model_name, system_prompt, temperature, max_tokens, metadata, uuid) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""", 
+                (random_title, model_name, system_prompt, temperature, max_tokens, metadata, uuid)
             )
             logger.info("Created new conversation with ID: %s", conversation_id)
             logger.info("Created new conversation with title: %s", random_title)
