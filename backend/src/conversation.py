@@ -44,22 +44,39 @@ class ConversationManager:
         )
 
     @classmethod
-    def create_new(cls, model: str = None, title: str = None):
+    def create_new(cls, model: str = None, title: str = None, system_prompt: str = None, 
+                   temperature: float = 0.7, max_tokens: int = None, **config):
         """
         Creates a new conversation and returns a ConversationManager instance.
         """
-        with DatabaseManager() as db:
-            db.connect()
-            conversation_id = db.create_conversation(title=title)
-        now = datetime.now()
+        # Create conversation with enhanced configuration
         conversation = Conversation(
-            id=conversation_id,
-            created_at=now,
-            updated_at=now,
             title=title,
             model=model,
-            metadata={},
+            model_name=model,  # Ensure both fields are set
+            system_prompt=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            metadata=config.get('metadata', {}),
         )
+        
+        with DatabaseManager() as db:
+            db.connect()
+            conversation_id = db.create_conversation(
+                title=title,
+                model_name=model,
+                system_prompt=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                metadata=json.dumps(conversation.metadata) if conversation.metadata else "",
+                uuid=conversation.uuid
+            )
+        
+        now = datetime.now()
+        conversation.id = conversation_id
+        conversation.created_at = now
+        conversation.updated_at = now
+        
         return cls(conversation)
 
     @classmethod
@@ -79,6 +96,12 @@ class ConversationManager:
             created_at=conversation_data.get("timestamp"),
             updated_at=conversation_data.get("timestamp"),
             title=conversation_data.get("title"),
+            model_name=conversation_data.get("model_name"),
+            system_prompt=conversation_data.get("system_prompt"),
+            temperature=conversation_data.get("temperature", 0.7),
+            max_tokens=conversation_data.get("max_tokens"),
+            metadata=json.loads(conversation_data.get("metadata", "{}")) if conversation_data.get("metadata") else {},
+            uuid=conversation_data.get("uuid"),
         )
 
         with DatabaseManager() as db:
@@ -100,6 +123,13 @@ class ConversationManager:
                 tool_calls=tool_calls,
                 tool_name=msg_data.get("tool_name"),
                 model=msg_data.get("model"),
+                # New Phase 1 fields
+                confidence_score=msg_data.get("confidence_score"),
+                token_count=msg_data.get("token_count"),
+                processing_time_ms=msg_data.get("processing_time_ms"),
+                metadata=json.loads(msg_data.get("metadata", "{}")) if msg_data.get("metadata") else None,
+                parent_message_id=msg_data.get("parent_message_id"),
+                uuid=msg_data.get("uuid"),
             )
             conversation.messages.append(message)
 
@@ -109,7 +139,7 @@ class ConversationManager:
         name="ConversationManager__add_user_message",
         attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
     )
-    def add_user_message(self, content: str, model: str = None) -> ChatMessage:
+    def add_user_message(self, content: str, model: str = None, **kwargs) -> ChatMessage:
         """
         Add a user message to the current conversation.
 
@@ -124,7 +154,11 @@ class ConversationManager:
             raise RuntimeError(NO_ACTIVE_CONVERSATION_MESSAGE)
 
         message = ChatMessage(
-            role=Role.USER, content=content, timestamp=datetime.now(), model=model
+            role=Role.USER, 
+            content=content, 
+            timestamp=datetime.now(), 
+            model=model,
+            **kwargs  # Support new fields like confidence_score, token_count, etc.
         )
 
         # Add to current conversation
@@ -143,6 +177,13 @@ class ConversationManager:
                 role=Role.USER.value,
                 content=content,
                 model=model,
+                # Pass new fields to database
+                confidence_score=message.confidence_score,
+                token_count=message.token_count,
+                processing_time_ms=message.processing_time_ms,
+                metadata=json.dumps(message.metadata) if message.metadata else "",
+                parent_message_id=message.parent_message_id,
+                uuid=message.uuid,
             )
 
         conversation_logger.debug(
@@ -161,6 +202,7 @@ class ConversationManager:
         thinking: str = None,
         model: str = None,
         tool_calls: List[Dict] = None,
+        **kwargs
     ) -> ChatMessage:
         """
         Add an assistant message to the current conversation.
@@ -184,6 +226,7 @@ class ConversationManager:
             thinking=thinking,
             model=model,
             tool_calls=tool_calls,
+            **kwargs  # Support new fields
         )
 
         # Add to current conversation
@@ -201,6 +244,13 @@ class ConversationManager:
                 thinking=thinking,
                 tool_calls=json.dumps(tool_calls) if tool_calls else "",
                 model=model,
+                # Pass new fields to database
+                confidence_score=message.confidence_score,
+                token_count=message.token_count,
+                processing_time_ms=message.processing_time_ms,
+                metadata=json.dumps(message.metadata) if message.metadata else "",
+                parent_message_id=message.parent_message_id,
+                uuid=message.uuid,
             )
 
         conversation_logger.debug(
@@ -214,7 +264,7 @@ class ConversationManager:
         attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
     )
     def add_tool_message(
-        self, content: str, tool_name: str, model: str = None
+        self, content: str, tool_name: str, model: str = None, **kwargs
     ) -> ChatMessage:
         """
         Add a tool message to the current conversation.
@@ -236,6 +286,7 @@ class ConversationManager:
             timestamp=datetime.now(),
             tool_name=tool_name,
             model=model,
+            **kwargs  # Support new fields
         )
 
         # Add to current conversation
@@ -252,6 +303,13 @@ class ConversationManager:
                 content=content,
                 tool_name=tool_name,
                 model=model,
+                # Pass new fields to database
+                confidence_score=message.confidence_score,
+                token_count=message.token_count,
+                processing_time_ms=message.processing_time_ms,
+                metadata=json.dumps(message.metadata) if message.metadata else "",
+                parent_message_id=message.parent_message_id,
+                uuid=message.uuid,
             )
 
         conversation_logger.debug(
@@ -316,6 +374,12 @@ class ConversationManager:
             created_at=conversation_data.get("timestamp"),
             updated_at=conversation_data.get("timestamp"),
             title=conversation_data.get("title"),
+            model_name=conversation_data.get("model_name"),
+            system_prompt=conversation_data.get("system_prompt"),
+            temperature=conversation_data.get("temperature", 0.7),
+            max_tokens=conversation_data.get("max_tokens"),
+            metadata=json.loads(conversation_data.get("metadata", "{}")) if conversation_data.get("metadata") else {},
+            uuid=conversation_data.get("uuid"),
         )
 
         # Load messages
@@ -338,6 +402,13 @@ class ConversationManager:
                 tool_calls=tool_calls,
                 tool_name=msg_data.get("tool_name"),
                 model=msg_data.get("model"),
+                # New Phase 1 fields
+                confidence_score=msg_data.get("confidence_score"),
+                token_count=msg_data.get("token_count"),
+                processing_time_ms=msg_data.get("processing_time_ms"),
+                metadata=json.loads(msg_data.get("metadata", "{}")) if msg_data.get("metadata") else None,
+                parent_message_id=msg_data.get("parent_message_id"),
+                uuid=msg_data.get("uuid"),
             )
             conversation.messages.append(message)
 
