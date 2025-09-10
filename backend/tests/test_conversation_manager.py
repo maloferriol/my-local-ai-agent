@@ -2,6 +2,7 @@
 Unit tests for the ConversationManager class.
 """
 
+import os
 import pytest
 import json
 import re
@@ -10,17 +11,17 @@ from src.conversation import ConversationManager
 from src.database.db import DatabaseManager
 from src.models import Role
 
+# Import the function from conftest
+from .conftest import managed_db_connection
+
 
 @pytest.fixture(scope="function")
-def db_manager_fixture():
+def db_manager_fixture(clean_db_manager):
     """
     Pytest fixture to set up an in-memory SQLite database for a single test function.
+    Uses the global clean_db_manager fixture for proper resource management.
     """
-    db_manager = DatabaseManager(db_file=":memory:")
-    db_manager.connect()
-    db_manager.create_init_tables()
-    yield db_manager
-    db_manager.close()
+    return clean_db_manager
 
 
 @pytest.fixture(scope="function") 
@@ -83,10 +84,7 @@ def test_add_user_message(conversation_manager_fixture, db_manager_fixture):
     assert last_message.content == message_content
 
     # Assert that it was persisted correctly in the database
-    from src.database.db import DatabaseManager
-    with DatabaseManager() as db:
-        db.connect()
-        db_messages = db.get_messages(conversation_id)
+    db_messages = db_manager_fixture.get_messages(conversation_id)
     assert len(db_messages) == 1
     db_message = db_messages[0]
     assert db_message["role"] == "user"
@@ -127,10 +125,7 @@ def test_add_assistant_message(conversation_manager_fixture, db_manager_fixture)
     assert current_convo.get_message_count() == 2
 
     # Assert on database persistence
-    from src.database.db import DatabaseManager
-    with DatabaseManager() as db:
-        db.connect()
-        db_messages = db.get_messages(conversation_id)
+    db_messages = db_manager_fixture.get_messages(conversation_id)
     assert len(db_messages) == 2
     db_message = db_messages[1]  # The assistant message is the second one
     assert db_message["role"] == "assistant"
@@ -160,10 +155,7 @@ def test_add_tool_message(conversation_manager_fixture, db_manager_fixture):
     assert added_message.tool_name == tool_name
 
     # Assert on database persistence
-    from src.database.db import DatabaseManager
-    with DatabaseManager() as db:
-        db.connect()
-        db_messages = db.get_messages(conversation_id)
+    db_messages = db_manager_fixture.get_messages(conversation_id)
     assert len(db_messages) == 1
     db_message = db_messages[0]
     assert db_message["role"] == "tool"
@@ -178,10 +170,7 @@ def test_load_conversation():
     from the database, including all its messages.
     """
     # Arrange: Manually populate the database to simulate a past conversation
-    from src.database.db import DatabaseManager
-    with DatabaseManager() as db:
-        db.connect()
-        db.create_init_tables()
+    with managed_db_connection() as db:
         conv_id = db.create_conversation(title="Old Conversation")
         db.insert_message(conv_id, 1, "user", "Hello")
         db.insert_message(
@@ -228,10 +217,7 @@ def test_update_conversation_title(conversation_manager_fixture, db_manager_fixt
     assert current_convo.title == new_title
 
     # Assert that the database was NOT updated (since the method doesn't implement DB updates)
-    from src.database.db import DatabaseManager
-    with DatabaseManager() as db:
-        db.connect()
-        db_convo = db.get_conversation(conversation_id)
+    db_convo = db_manager_fixture.get_conversation(conversation_id)
     assert db_convo["title"] == "Test Conversation"  # Original title from fixture
 
 

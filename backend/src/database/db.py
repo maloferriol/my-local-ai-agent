@@ -13,10 +13,38 @@ tracer = trace.get_tracer(__name__)
 # Get your logger instance for this module
 logger = logging.getLogger("db_sqlite_logger")
 
-project_root = Path(__file__).resolve().parent.parent.parent
-databases_dir = project_root / "data"
-os.makedirs(databases_dir, exist_ok=True)
-default_db_file = databases_dir / "conversation_data.db"
+def get_default_db_file():
+    """Get the default database file based on environment."""
+    # Check if we're in testing mode
+    if os.environ.get("TESTING") == "true" or os.environ.get("PYTEST_CURRENT_TEST"):
+        # Use a shared temporary file for all test database connections
+        import tempfile
+        test_db_file = os.environ.get("TEST_DB_FILE")
+        if not test_db_file:
+            # Create a temporary file that will be shared across all test database connections
+            fd, test_db_file = tempfile.mkstemp(suffix=".db", prefix="test_")
+            os.close(fd)  # Close file descriptor, but keep the file path
+            os.environ["TEST_DB_FILE"] = test_db_file
+        return test_db_file
+    
+    # Check for explicit DATABASE_URL
+    db_url = os.environ.get("DATABASE_URL")
+    if db_url:
+        # For SQLite URLs, extract the file path
+        if db_url.startswith("sqlite:///"):
+            return db_url[10:]  # Remove 'sqlite:///' prefix
+        elif db_url.startswith("sqlite://"):
+            return db_url[9:]   # Remove 'sqlite://' prefix
+        # For other database types, we'd need different handling
+        # For now, fall back to default SQLite file
+    
+    # Default persistent database for production
+    project_root = Path(__file__).resolve().parent.parent.parent
+    databases_dir = project_root / "data"
+    os.makedirs(databases_dir, exist_ok=True)
+    return databases_dir / "conversation_data.db"
+
+default_db_file = get_default_db_file()
 
 ERROR_CONNECTION_MESSAGE = "Not connected to database. Call connect() first."
 
@@ -30,6 +58,9 @@ class DatabaseManager:
 
     def __enter__(self):
         self.connect()
+        # Auto-create tables for test databases
+        if (os.environ.get("TESTING") == "true" or os.environ.get("PYTEST_CURRENT_TEST")) and self.db_file:
+            self.create_init_tables()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
