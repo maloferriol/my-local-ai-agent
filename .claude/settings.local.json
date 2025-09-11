@@ -5,7 +5,9 @@
       "Bash(python:*)",
       "Bash(find:*)",
       "Bash(ls:*)",
-      "Bash(pytest:*)"
+      "Bash(pytest:*)",
+      "Bash(PYTHONTRACEMALLOC=1 python -m pytest:*)",
+      "Bash(PYTHONTRACEMALLOC=1 python -m pytest tests/test_e2e_api.py::test_get_nonexistent_conversation -v)"
     ],
     "deny": [],
     "ask": []

@@ -61,7 +61,6 @@ class ConversationManager:
         )
         
         with DatabaseManager() as db:
-            db.connect()
             conversation_id = db.create_conversation(
                 title=title,
                 model_name=model,
@@ -85,7 +84,6 @@ class ConversationManager:
         Loads an existing conversation and returns a ConversationManager instance.
         """
         with DatabaseManager() as db:
-            db.connect()
             conversation_data = db.get_conversation(conversation_id)
         if not conversation_data:
             conversation_logger.warning("Conversation %s not found", conversation_id)
@@ -105,7 +103,6 @@ class ConversationManager:
         )
 
         with DatabaseManager() as db:
-            db.connect()
             messages_data = db.get_messages(conversation_id)
         for msg_data in messages_data:
             tool_calls = None
@@ -170,7 +167,6 @@ class ConversationManager:
         conversation_id = (self.current_conversation.id,)
         print("conversation_id", conversation_id)
         with DatabaseManager() as db:
-            db.connect()
             db.insert_message(
                 conversation_id=self.current_conversation.id,
                 step=step,
@@ -235,7 +231,6 @@ class ConversationManager:
         # Store in database
         step = self.current_conversation.get_message_count()
         with DatabaseManager() as db:
-            db.connect()
             db.insert_message(
                 conversation_id=self.current_conversation.id,
                 step=step,
@@ -295,7 +290,6 @@ class ConversationManager:
         # Store in database
         step = self.current_conversation.get_message_count()
         with DatabaseManager() as db:
-            db.connect()
             db.insert_message(
                 conversation_id=self.current_conversation.id,
                 step=step,
@@ -361,7 +355,6 @@ class ConversationManager:
         """
         # Load from database
         with DatabaseManager() as db:
-            db.connect()
             conversation_data = db.get_conversation(conversation_id)
         if not conversation_data:
             conversation_logger.warning("Conversation %s not found", conversation_id)
@@ -384,7 +377,6 @@ class ConversationManager:
 
         # Load messages
         with DatabaseManager() as db:
-            db.connect()
             messages_data = db.get_messages(conversation_id)
         for msg_data in messages_data:
             tool_calls = None
