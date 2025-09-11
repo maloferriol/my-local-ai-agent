@@ -51,13 +51,9 @@ async def lifespan(app: FastAPI):
     Manage application startup and shutdown events.
     """
     print("Application startup: Ensuring database tables exist...")
-    db = DatabaseManager()
-    try:
-        db.connect()
+    with DatabaseManager() as db:
         db.create_init_tables()
         logger.info("Database tables verified.")
-    finally:
-        db.close()
     yield
     # On shutdown, you can add cleanup logic if needed
     print("Application shutdown.")
