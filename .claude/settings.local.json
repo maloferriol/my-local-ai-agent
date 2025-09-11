@@ -7,7 +7,9 @@
       "Bash(ls:*)",
       "Bash(pytest:*)",
       "Bash(PYTHONTRACEMALLOC=1 python -m pytest:*)",
-      "Bash(PYTHONTRACEMALLOC=1 python -m pytest tests/test_e2e_api.py::test_get_nonexistent_conversation -v)"
+      "Bash(PYTHONTRACEMALLOC=1 python -m pytest tests/test_e2e_api.py::test_get_nonexistent_conversation -v)",
+      "Bash(unset:*)",
+      "Bash(TESTING=\"\" python -c \"from src.database.db import DatabaseManager, get_default_db_file; print(''Production DB file:'', get_default_db_file()); db = DatabaseManager(); print(''Database configured successfully'')\")"
     ],
     "deny": [],
     "ask": []
