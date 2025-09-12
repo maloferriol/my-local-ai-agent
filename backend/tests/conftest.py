@@ -11,6 +11,7 @@ os.environ["OTEL_SDK_DISABLED"] = "true"
 # Ensure tests use in-memory database
 os.environ["TESTING"] = "true"
 
+
 def pytest_sessionstart(session):
     """Called after the Session object has been created."""
     # Clean up any existing test database file
@@ -19,6 +20,7 @@ def pytest_sessionstart(session):
         os.unlink(test_db_file)
     # Clear the environment variable to force creation of a new temp file
     os.environ.pop("TEST_DB_FILE", None)
+
 
 def pytest_sessionfinish(session, exitstatus):
     """Called after whole test run finished."""
@@ -36,7 +38,7 @@ def managed_db_connection(db_file=None):
     Ensures connections are always closed to prevent ResourceWarnings.
     """
     from src.database.db import DatabaseManager
-    
+
     # Use the default test database file if none specified
     db_manager = DatabaseManager(db_file=db_file) if db_file else DatabaseManager()
     try:

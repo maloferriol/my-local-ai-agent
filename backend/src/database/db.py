@@ -13,12 +13,14 @@ tracer = trace.get_tracer(__name__)
 # Get your logger instance for this module
 logger = logging.getLogger("db_sqlite_logger")
 
+
 def get_default_db_file():
     """Get the default database file based on environment."""
     # Check if we're in testing mode
     if os.environ.get("TESTING") == "true" or os.environ.get("PYTEST_CURRENT_TEST"):
         # Use a shared temporary file for all test database connections
         import tempfile
+
         test_db_file = os.environ.get("TEST_DB_FILE")
         if not test_db_file:
             # Create a temporary file that will be shared across all test database connections
@@ -26,7 +28,7 @@ def get_default_db_file():
             os.close(fd)  # Close file descriptor, but keep the file path
             os.environ["TEST_DB_FILE"] = test_db_file
         return test_db_file
-    
+
     # Check for explicit DATABASE_URL
     db_url = os.environ.get("DATABASE_URL")
     if db_url:
@@ -34,15 +36,16 @@ def get_default_db_file():
         if db_url.startswith("sqlite:///"):
             return db_url[10:]  # Remove 'sqlite:///' prefix
         elif db_url.startswith("sqlite://"):
-            return db_url[9:]   # Remove 'sqlite://' prefix
+            return db_url[9:]  # Remove 'sqlite://' prefix
         # For other database types, we'd need different handling
         # For now, fall back to default SQLite file
-    
+
     # Default persistent database for production
     project_root = Path(__file__).resolve().parent.parent.parent
     databases_dir = project_root / "data"
     os.makedirs(databases_dir, exist_ok=True)
     return databases_dir / "conversation_data.db"
+
 
 default_db_file = get_default_db_file()
 
@@ -59,7 +62,9 @@ class DatabaseManager:
     def __enter__(self):
         self.connect()
         # Auto-create tables for test databases
-        if (os.environ.get("TESTING") == "true" or os.environ.get("PYTEST_CURRENT_TEST")) and self.db_file:
+        if (
+            os.environ.get("TESTING") == "true" or os.environ.get("PYTEST_CURRENT_TEST")
+        ) and self.db_file:
             self.create_init_tables()
         return self
 
@@ -198,58 +203,66 @@ class DatabaseManager:
                     uuid TEXT
                 """,
             )
-            
+
             # Apply backward-compatible schema updates
             self.apply_schema_migrations()
         except Exception as e:
             logger.exception("Error creating initial tables: %s", e)
 
-    @tracer.start_as_current_span("apply_schema_migrations", kind=trace.SpanKind.INTERNAL)
+    @tracer.start_as_current_span(
+        "apply_schema_migrations", kind=trace.SpanKind.INTERNAL
+    )
     def apply_schema_migrations(self):
         """Apply backward-compatible schema migrations for existing databases."""
         try:
             # Get existing columns for conversations table
             existing_conv_columns = self._get_table_columns("conversations")
             conv_columns = {col[1] for col in existing_conv_columns}
-            
+
             # Add new conversation columns if they don't exist
             new_conv_columns = [
                 ("model_name", "TEXT"),
-                ("system_prompt", "TEXT"), 
+                ("system_prompt", "TEXT"),
                 ("temperature", "REAL DEFAULT 0.7"),
                 ("max_tokens", "INTEGER"),
                 ("metadata", "TEXT"),
-                ("uuid", "TEXT")
+                ("uuid", "TEXT"),
             ]
-            
+
             for col_name, col_type in new_conv_columns:
                 if col_name not in conv_columns:
-                    self.cursor.execute(f"ALTER TABLE conversations ADD COLUMN {col_name} {col_type}")
+                    self.cursor.execute(
+                        f"ALTER TABLE conversations ADD COLUMN {col_name} {col_type}"
+                    )
                     logger.info(f"Added column {col_name} to conversations table")
 
-            # Get existing columns for messages table  
+            # Get existing columns for messages table
             existing_msg_columns = self._get_table_columns("messages")
             msg_columns = {col[1] for col in existing_msg_columns}
-            
+
             # Add new message columns if they don't exist
             new_msg_columns = [
                 ("confidence_score", "REAL"),
                 ("token_count", "INTEGER"),
-                ("processing_time_ms", "INTEGER"), 
+                ("processing_time_ms", "INTEGER"),
                 ("metadata", "TEXT"),
                 ("parent_message_id", "INTEGER REFERENCES messages(id)"),
-                ("uuid", "TEXT")
+                ("uuid", "TEXT"),
             ]
-            
+
             for col_name, col_type in new_msg_columns:
                 if col_name not in msg_columns:
-                    self.cursor.execute(f"ALTER TABLE messages ADD COLUMN {col_name} {col_type}")
+                    self.cursor.execute(
+                        f"ALTER TABLE messages ADD COLUMN {col_name} {col_type}"
+                    )
                     logger.info(f"Added column {col_name} to messages table")
-                    
+
             self.conn.commit()
-            
+
         except sqlite3.Error as e:
-            logger.warning(f"Schema migration error (may be expected for new databases): {e}")
+            logger.warning(
+                f"Schema migration error (may be expected for new databases): {e}"
+            )
 
     def _get_table_columns(self, table_name: str):
         """Get column information for a table."""
@@ -435,8 +448,16 @@ class DatabaseManager:
             conversation_id = self.execute_query(
                 """INSERT INTO conversations 
                    (title, model_name, system_prompt, temperature, max_tokens, metadata, uuid) 
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""", 
-                (random_title, model_name, system_prompt, temperature, max_tokens, metadata, uuid)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    random_title,
+                    model_name,
+                    system_prompt,
+                    temperature,
+                    max_tokens,
+                    metadata,
+                    uuid,
+                ),
             )
             logger.info("Created new conversation with ID: %s", conversation_id)
             logger.info("Created new conversation with title: %s", random_title)

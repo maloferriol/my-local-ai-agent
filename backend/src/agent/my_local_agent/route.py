@@ -15,7 +15,7 @@ from opentelemetry.context import get_current
 
 from rich import print
 
-from .examples import get_weather, get_weather_conditions
+from .examples import get_weather, get_weather_conditions, tool_registry
 import traceback
 
 from src.database.db import DatabaseManager
@@ -67,10 +67,26 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-available_tools_default = {
-    "get_weather": get_weather,
-    "get_weather_conditions": get_weather_conditions,
-}
+
+# Enhanced tool management using the registry
+def get_available_tools_dict() -> Dict[str, Any]:
+    """Get available tools as dictionary for backward compatibility."""
+    tools_dict = {}
+    for tool_name, tool in tool_registry.tools.items():
+        # Use the backward compatibility functions
+        if tool_name == "get_weather":
+            tools_dict[tool_name] = get_weather
+        elif tool_name == "get_weather_conditions":
+            tools_dict[tool_name] = get_weather_conditions
+        else:
+            # For new tools, use the tool's execute method
+            tools_dict[tool_name] = lambda *args, **kwargs: tool.execute(
+                *args, **kwargs
+            )
+    return tools_dict
+
+
+available_tools_default = get_available_tools_dict()
 
 
 @app.get("/conversation/{conversation_id}", response_model=Conversation)
@@ -94,6 +110,50 @@ async def get_conversation(
         return conv_manager.get_current_conversation()
     else:
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+
+@app.get("/tools/stats")
+@tracer.start_as_current_span(name="get_tool_stats", kind=SpanKind.INTERNAL)
+async def get_tool_stats():
+    """
+    Get statistics about registered tools.
+
+    Returns:
+        Tool registry statistics including usage metrics.
+    """
+    return tool_registry.get_tool_stats()
+
+
+@app.get("/tools")
+@tracer.start_as_current_span(name="get_tools", kind=SpanKind.INTERNAL)
+async def get_tools():
+    """
+    Get list of all available tools with their metadata.
+
+    Returns:
+        List of available tools with their versions and metadata.
+    """
+    active_tools = tool_registry.get_active_tools()
+    return [tool.to_dict() for tool in active_tools]
+
+
+@app.get("/conversation/{conversation_id}/enhanced-summary")
+@tracer.start_as_current_span(name="get_enhanced_summary", kind=SpanKind.INTERNAL)
+async def get_enhanced_conversation_summary(conversation_id: int):
+    """
+    Get enhanced conversation summary with planning and tracing information.
+
+    Args:
+        conversation_id: The ID of the conversation
+
+    Returns:
+        Enhanced summary with planning, tracing, and performance metrics
+    """
+    conv_manager = ConversationManager.load_existing(conversation_id)
+    if not conv_manager:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    return conv_manager.get_enhanced_summary()
 
 
 async def _stream_model_response(  # noqa: C901
@@ -226,18 +286,48 @@ async def _execute_tools(
 
                         tool_span.set_attribute("tool.name", tool_name)
 
-                        function_to_call = available_tools_default.get(tool_name)
-                        if not function_to_call:
-                            error_msg = f"Tool '{tool_name}' not found."
-                            print(f"FAIL {error_msg}")
-                            logger.error(error_msg)
-                            raise ValueError(error_msg)
+                        # Check if tool exists in registry first
+                        tool = tool_registry.get_tool(tool_name)
+                        if tool:
+                            # Enhanced tracing with tool metadata
+                            tool_span.set_attribute(
+                                "tool.version", tool.current_version
+                            )
+                            tool_span.set_attribute("tool.category", tool.category)
+                            tool_span.set_attribute("tool.status", tool.status.value)
+                            tool_span.set_attribute("tool.call_count", tool.call_count)
 
-                        args = tool_call.get("function", {}).get("arguments", {})
-                        tool_span.set_attribute("tool.arguments", json.dumps(args))
-                        print(f"Executing tool '{tool_name}' with args: {args}")
-                        result = function_to_call(**args)
-                        tool_span.set_attribute("tool.result", str(result))
+                            args = tool_call.get("function", {}).get("arguments", {})
+                            tool_span.set_attribute("tool.arguments", json.dumps(args))
+                            print(
+                                f"Executing tool '{tool_name}' v{tool.current_version} with args: {args}"
+                            )
+
+                            # Execute through registry for enhanced tracking
+                            result = tool_registry.execute_tool(tool_name, **args)
+
+                            # Add enhanced metrics
+                            tool_span.set_attribute("tool.result", str(result))
+                            tool_span.set_attribute(
+                                "tool.average_execution_time_ms",
+                                tool.average_execution_time_ms,
+                            )
+                        else:
+                            # Fallback to legacy tool execution
+                            function_to_call = available_tools_default.get(tool_name)
+                            if not function_to_call:
+                                error_msg = f"Tool '{tool_name}' not found in registry or legacy tools."
+                                print(f"FAIL {error_msg}")
+                                logger.error(error_msg)
+                                raise ValueError(error_msg)
+
+                            args = tool_call.get("function", {}).get("arguments", {})
+                            tool_span.set_attribute("tool.arguments", json.dumps(args))
+                            print(
+                                f"Executing legacy tool '{tool_name}' with args: {args}"
+                            )
+                            result = function_to_call(**args)
+                            tool_span.set_attribute("tool.result", str(result))
                         # Save tool result using the conversation manager
                         conv_manager.add_tool_message(
                             content=str(result),

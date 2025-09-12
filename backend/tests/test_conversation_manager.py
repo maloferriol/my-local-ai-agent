@@ -1,14 +1,10 @@
 """
 Unit tests for the ConversationManager class.
 """
-
-import os
 import pytest
 import json
-import re
 
 from src.conversation import ConversationManager
-from src.database.db import DatabaseManager
 from src.models import Role
 
 # Import the function from conftest
@@ -24,7 +20,7 @@ def db_manager_fixture(clean_db_manager):
     return clean_db_manager
 
 
-@pytest.fixture(scope="function") 
+@pytest.fixture(scope="function")
 def conversation_manager_fixture(db_manager_fixture):
     """
     Pytest fixture that provides a ConversationManager instance initialized
@@ -32,7 +28,7 @@ def conversation_manager_fixture(db_manager_fixture):
     """
     # Ensure the fixture database has tables
     db_manager_fixture.create_init_tables()
-    
+
     # Create a new conversation using the class method
     return ConversationManager.create_new(title="Test Conversation", model="test-model")
 
@@ -50,7 +46,9 @@ def test_create_new_conversation(conversation_manager_fixture, db_manager_fixtur
     assert current_convo.model == "test-model"
 
     # Test creating another conversation
-    new_manager = ConversationManager.create_new(title="Another Test", model="another-model")
+    new_manager = ConversationManager.create_new(
+        title="Another Test", model="another-model"
+    )
     new_convo = new_manager.get_current_conversation()
     assert new_convo.title == "Another Test"
     assert new_convo.model == "another-model"
@@ -174,7 +172,11 @@ def test_load_conversation():
         conv_id = db.create_conversation(title="Old Conversation")
         db.insert_message(conv_id, 1, "user", "Hello")
         db.insert_message(
-            conv_id, 2, "assistant", "Hi there", tool_calls=json.dumps([{"name": "test"}])
+            conv_id,
+            2,
+            "assistant",
+            "Hi there",
+            tool_calls=json.dumps([{"name": "test"}]),
         )
 
     # Act
@@ -238,7 +240,7 @@ def test_add_message_without_active_conversation(add_message_method, args):
     manager = ConversationManager.create_new(title="Test", model="test")
     # Set current conversation to None to simulate no active conversation
     manager.current_conversation = None
-    
+
     method_to_call = getattr(manager, add_message_method)
     expected_error = "No active conversation"
 

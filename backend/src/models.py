@@ -37,7 +37,7 @@ class ChatMessage:
         """Initialize UUID if not provided."""
         if self.uuid is None:
             self.uuid = str(uuid.uuid4())
-        
+
         # Validate confidence score
         if self.confidence_score is not None:
             if not 0.0 <= self.confidence_score <= 1.0:
@@ -45,15 +45,16 @@ class ChatMessage:
 
     def validate(self) -> bool:
         """Validate the message data."""
-        if not self.content and not self.tool_calls:
-            raise ValueError("Message must have either content or tool_calls")
-        
+        # I think that there could be thiniking as well 
+        if not self.content and not self.tool_calls and not self.thinking:
+            raise ValueError("Message must have either content or tool_calls or thinking")
+
         if self.token_count is not None and self.token_count < 0:
             raise ValueError("token_count cannot be negative")
-            
+
         if self.processing_time_ms is not None and self.processing_time_ms < 0:
             raise ValueError("processing_time_ms cannot be negative")
-            
+
         return True
 
     def to_dict(self) -> Dict[str, Any]:
@@ -65,7 +66,7 @@ class ChatMessage:
         # Serialize datetime if present
         if isinstance(data.get("timestamp"), datetime):
             data["timestamp"] = data["timestamp"].isoformat()
-        
+
         # Filter out None values for cleaner API payloads
         return {k: v for k, v in data.items() if v is not None}
 
@@ -104,7 +105,7 @@ class Conversation:
         """Initialize UUID if not provided and set defaults."""
         if self.uuid is None:
             self.uuid = str(uuid.uuid4())
-        
+
         # Sync model fields for backward compatibility
         if self.model_name is None and self.model is not None:
             self.model_name = self.model
@@ -119,10 +120,10 @@ class Conversation:
         """Validate the conversation data."""
         if self.temperature < 0.0 or self.temperature > 2.0:
             raise ValueError("temperature must be between 0.0 and 2.0")
-            
+
         if self.max_tokens is not None and self.max_tokens <= 0:
             raise ValueError("max_tokens must be positive")
-            
+
         return True
 
     def add_message(self, message: ChatMessage):
@@ -167,16 +168,16 @@ class Conversation:
     def to_dict(self) -> Dict[str, Any]:
         """Convert conversation to dictionary format."""
         conv_dict = asdict(self)
-        
+
         # Serialize datetime fields
         if self.created_at:
             conv_dict["created_at"] = self.created_at.isoformat()
         if self.updated_at:
             conv_dict["updated_at"] = self.updated_at.isoformat()
-            
+
         if self.messages:
             conv_dict["messages"] = [m.to_dict() for m in self.messages]
-            
+
         return conv_dict
 
     def get_metadata_value(self, key: str, default: Any = None) -> Any:
