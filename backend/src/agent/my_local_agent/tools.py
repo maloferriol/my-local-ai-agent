@@ -1,7 +1,10 @@
 from typing import List
 from ...tools.models import Tool
 from ...tools.registry import ToolRegistry
-from ...tools.implementations.weather import get_weather_impl, get_weather_conditions_impl
+from ...tools.implementations.weather import (
+    get_weather_impl,
+    get_weather_conditions_impl,
+)
 
 
 def create_weather_tools() -> List[Tool]:

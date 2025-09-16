@@ -45,9 +45,10 @@ class ChatMessage:
 
     def validate(self) -> bool:
         """Validate the message data."""
-        # I think that there could be thiniking as well 
         if not self.content and not self.tool_calls and not self.thinking:
-            raise ValueError("Message must have either content or tool_calls or thinking")
+            raise ValueError(
+                "Message must have either content or tool_calls or thinking"
+            )
 
         if self.token_count is not None and self.token_count < 0:
             raise ValueError("token_count cannot be negative")
