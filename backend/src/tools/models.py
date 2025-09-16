@@ -1,17 +1,20 @@
-import random
+"""
+Tool models for the agent system.
+
+This module provides models for tools with metadata, versioning, and execution tracking.
+"""
+
 import logging
-from typing import Dict, Any, Callable, Optional, List
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-import uuid
+from typing import Any, Callable, Dict, List, Optional
 
 from openinference.semconv.trace import SpanAttributes
 from opentelemetry import trace
 
-# Get your logger instance for this module
 logger = logging.getLogger("tools_logger")
-
 tracer = trace.get_tracer(__name__)
 
 
@@ -186,179 +189,3 @@ class Tool:
                 for ver, info in self.versions.items()
             },
         }
-
-
-class ToolRegistry:
-    """Registry for managing tools with versioning."""
-
-    def __init__(self):
-        self.tools: Dict[str, Tool] = {}
-        self.tool_categories: Dict[str, List[str]] = {}
-
-    def register_tool(self, tool: Tool) -> None:
-        """Register a tool in the registry."""
-        self.tools[tool.name] = tool
-
-        # Update category index
-        if tool.category not in self.tool_categories:
-            self.tool_categories[tool.category] = []
-        if tool.name not in self.tool_categories[tool.category]:
-            self.tool_categories[tool.category].append(tool.name)
-
-        logger.info(f"Registered tool: {tool.name} v{tool.current_version}")
-
-    def get_tool(self, name: str) -> Optional[Tool]:
-        """Get a tool by name."""
-        return self.tools.get(name)
-
-    def execute_tool(self, name: str, *args, **kwargs) -> Any:
-        """Execute a tool by name."""
-        tool = self.get_tool(name)
-        if not tool:
-            raise ValueError(f"Tool '{name}' not found in registry")
-
-        if tool.status == ToolStatus.DISABLED:
-            raise ValueError(f"Tool '{name}' is disabled")
-
-        return tool.execute(*args, **kwargs)
-
-    def get_tools_by_category(self, category: str) -> List[Tool]:
-        """Get all tools in a specific category."""
-        return [
-            tool
-            for tool in self.tools.values()
-            if tool.category == category and tool.status != ToolStatus.DISABLED
-        ]
-
-    def get_active_tools(self) -> List[Tool]:
-        """Get all active tools."""
-        return [
-            tool for tool in self.tools.values() if tool.status == ToolStatus.ACTIVE
-        ]
-
-    def get_tool_stats(self) -> Dict[str, Any]:
-        """Get statistics about registered tools."""
-        total_tools = len(self.tools)
-        active_tools = len(self.get_active_tools())
-        total_calls = sum(tool.call_count for tool in self.tools.values())
-
-        categories_stats = {}
-        for category, tool_names in self.tool_categories.items():
-            category_tools = [self.tools[name] for name in tool_names]
-            categories_stats[category] = {
-                "tool_count": len(category_tools),
-                "total_calls": sum(tool.call_count for tool in category_tools),
-                "average_execution_time_ms": (
-                    sum(tool.average_execution_time_ms for tool in category_tools)
-                    / len(category_tools)
-                    if category_tools
-                    else 0
-                ),
-            }
-
-        return {
-            "total_tools": total_tools,
-            "active_tools": active_tools,
-            "total_calls": total_calls,
-            "categories": categories_stats,
-            "last_updated": datetime.now().isoformat(),
-        }
-
-
-# Global tool registry
-tool_registry = ToolRegistry()
-
-
-def _get_weather_impl(city: str) -> str:
-    """
-    Implementation for getting the current temperature for a city.
-
-    Args:
-        city (str): The name of the city
-
-    Returns:
-        str: The current temperature
-    """
-    # Get the current span from the context
-    current_span = trace.get_current_span()
-
-    # Add attributes to the span
-    current_span.set_attribute("input.city", city)
-
-    temperatures = list(range(-10, 35))
-    temp = random.choice(temperatures)
-
-    return f"The temperature in {city} is {temp}°C"
-
-
-def _get_weather_conditions_impl(city: str) -> str:
-    """
-    Implementation for getting the weather conditions for a city.
-
-    Args:
-        city (str): The name of the city
-
-    Returns:
-        str: The current weather conditions
-    """
-    # Get the current span from the context
-    current_span = trace.get_current_span()
-
-    # Add attributes to the span
-    current_span.set_attribute("input.city", city)
-
-    conditions = ["sunny", "cloudy", "rainy", "snowy", "foggy"]
-    return random.choice(conditions)
-
-
-# Register tools in the registry
-weather_tool = Tool(
-    name="get_weather",
-    description="Get the current temperature for a city",
-    function=_get_weather_impl,
-    category="weather",
-    tags=["weather", "temperature", "city"],
-    author="LocalAgent Team",
-    current_version="1.0.0",
-)
-
-weather_conditions_tool = Tool(
-    name="get_weather_conditions",
-    description="Get the weather conditions for a city",
-    function=_get_weather_conditions_impl,
-    category="weather",
-    tags=["weather", "conditions", "city"],
-    author="LocalAgent Team",
-    current_version="1.0.0",
-)
-
-# Register the tools
-tool_registry.register_tool(weather_tool)
-tool_registry.register_tool(weather_conditions_tool)
-
-
-# Backward compatibility functions that use the registry
-def get_weather(city: str) -> str:
-    """
-    Get the current temperature for a city.
-
-    Args:
-        city (str): The name of the city
-
-    Returns:
-        str: The current temperature
-    """
-    return tool_registry.execute_tool("get_weather", city)
-
-
-def get_weather_conditions(city: str) -> str:
-    """
-    Get the weather conditions for a city.
-
-    Args:
-        city (str): The name of the city
-
-    Returns:
-        str: The current weather conditions
-    """
-    return tool_registry.execute_tool("get_weather_conditions", city)
