@@ -1,0 +1,25 @@
+| Name                                              |    Stmts |     Miss |   Cover |
+|-------------------------------------------------- | -------: | -------: | ------: |
+| backend/src/agent/my\_local\_agent/route.py       |      242 |       81 |     67% |
+| backend/src/agent/my\_local\_agent/tools.py       |       13 |        0 |    100% |
+| backend/src/app.py                                |        6 |        0 |    100% |
+| backend/src/conversation.py                       |      227 |      108 |     52% |
+| backend/src/database/db.py                        |      236 |       85 |     64% |
+| backend/src/logging\_config.py                    |       30 |        0 |    100% |
+| backend/src/models.py                             |      121 |        5 |     96% |
+| backend/src/models/\_\_init\_\_.py                |       12 |        0 |    100% |
+| backend/src/models/planning.py                    |      154 |       79 |     49% |
+| backend/src/models/tracing.py                     |      181 |      103 |     43% |
+| backend/src/tools/\_\_init\_\_.py                 |        5 |        0 |    100% |
+| backend/src/tools/implementations/\_\_init\_\_.py |        0 |        0 |    100% |
+| backend/src/tools/implementations/weather.py      |       14 |        4 |     71% |
+| backend/src/tools/models.py                       |       75 |       10 |     87% |
+| backend/src/tools/registry.py                     |       38 |       12 |     68% |
+| backend/tests/\_\_init\_\_.py                     |        0 |        0 |    100% |
+| backend/tests/conftest.py                         |       29 |        8 |     72% |
+| backend/tests/test\_conversation\_manager.py      |      112 |        0 |    100% |
+| backend/tests/test\_e2e\_api.py                   |       93 |        0 |    100% |
+| backend/tests/test\_enhanced\_models.py           |      208 |        0 |    100% |
+| backend/tests/test\_logging.py                    |       87 |        1 |     99% |
+| backend/tests/test\_logging\_config.py            |       37 |        1 |     97% |
+|                                         **TOTAL** | **1920** |  **497** | **74%** |
