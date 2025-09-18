@@ -3,7 +3,6 @@ Unit tests for Phase 1 enhanced models (ChatMessage and Conversation).
 """
 
 import pytest
-import json
 from datetime import datetime
 
 from src.models import ChatMessage, Conversation, Role

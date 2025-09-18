@@ -11,7 +11,7 @@ import pytest
 import anyio
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
-from fastapi import HTTPException
+
 
 # Mock environment before importing
 with patch.dict(os.environ, {"OLLAMA_URL": "http://localhost:11434"}):

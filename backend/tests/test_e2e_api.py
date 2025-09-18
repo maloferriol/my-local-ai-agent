@@ -19,7 +19,6 @@ from fastapi.testclient import TestClient
 # Mock environment before importing the app to avoid OLLAMA_URL error
 with patch.dict(os.environ, {"OLLAMA_URL": "http://localhost:11434"}):
     from src.app import app
-    from src.database.db import DatabaseManager
 
 
 @pytest.fixture(scope="function")

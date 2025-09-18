@@ -14,7 +14,7 @@ from datetime import datetime
 
 from src.models import Conversation, ChatMessage, Role
 from src.models.planning import AgentPlan, PlanStep, PlanStatus
-from src.models.tracing import ExecutionTrace, ExecutionSpan, SpanStatus
+from src.models.tracing import ExecutionTrace, ExecutionSpan
 from src.database.db import DatabaseManager
 
 
@@ -586,6 +586,30 @@ class ConversationManager:
         conversation_logger.info(f"Created plan '{title}' with {len(plan.steps)} steps")
         return plan
 
+    def _execute_step(self, step: PlanStep):
+        step.start_execution()
+        conversation_logger.info(f"Executing step '{step.title}'")
+        try:
+            # In a real implementation, this would call the actual
+            # execution logic based on step configuration
+            # For now, we'll mark steps as completed
+            step.complete_execution(f"Step '{step.title}' completed")
+        except Exception as e:
+            step.fail_execution(str(e))
+            conversation_logger.error(f"Step '{step.title}' failed: {e}")
+
+    def _get_next_steps(self, plan: AgentPlan) -> List[PlanStep]:
+        next_steps = plan.get_next_steps()
+        if not next_steps:
+            # Check if we have failed steps that can be retried
+            retry_steps = plan.get_retry_candidates()
+            if retry_steps and plan.auto_retry_failed_steps:
+                for step in retry_steps:
+                    step.reset_for_retry()
+                    conversation_logger.info(f"Retrying step '{step.title}'")
+                return retry_steps
+        return next_steps
+
     @tracer.start_as_current_span(
         name="ConversationManager__execute_plan",
         attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "CHAIN"},
@@ -609,33 +633,9 @@ class ConversationManager:
         plan.start_execution()
         conversation_logger.info(f"Starting execution of plan '{plan.title}'")
 
-        # Simple execution loop - in a real implementation this would
-        # integrate with the agent's execution engine
-        while True:
-            next_steps = plan.get_next_steps()
-            if not next_steps:
-                # Check if we have failed steps that can be retried
-                retry_steps = plan.get_retry_candidates()
-                if retry_steps and plan.auto_retry_failed_steps:
-                    for step in retry_steps:
-                        step.reset_for_retry()
-                        conversation_logger.info(f"Retrying step '{step.title}'")
-                    continue
-                else:
-                    break
-
+        while next_steps := self._get_next_steps(plan):
             for step in next_steps:
-                step.start_execution()
-                conversation_logger.info(f"Executing step '{step.title}'")
-
-                try:
-                    # In a real implementation, this would call the actual
-                    # execution logic based on step configuration
-                    # For now, we'll mark steps as completed
-                    step.complete_execution(f"Step '{step.title}' completed")
-                except Exception as e:
-                    step.fail_execution(str(e))
-                    conversation_logger.error(f"Step '{step.title}' failed: {e}")
+                self._execute_step(step)
 
         if plan.is_complete():
             plan.complete_execution("Plan completed successfully")

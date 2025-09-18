@@ -10,13 +10,12 @@ import pytest
 import sqlite3
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 
 from src.database.db import (
     DatabaseManager,
     DatabaseUtils,
     get_default_db_file,
-    default_db_file,
     ERROR_CONNECTION_MESSAGE,
 )
 

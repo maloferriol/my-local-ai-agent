@@ -278,8 +278,6 @@ async def _execute_tools(
                         tool_span.set_attribute("tool.name", tool_name)
 
                         # Check if tool exists in registry first
-                        # LLM returns the function name, so we look up by function name
-                        # This ensures we find the tool even if the tool name differs from function name
                         tool = tool_registry.get_tool_by_function_name(tool_name)
                         if tool:
                             print(f"Found tool in registry: {tool_name}")
@@ -294,7 +292,9 @@ async def _execute_tools(
                             args = tool_call.get("function", {}).get("arguments", {})
                             tool_span.set_attribute("tool.arguments", json.dumps(args))
                             print(
-                                f"Executing tool '{tool_name}' v{tool.current_version} with args: {args}"
+                                f"Executing tool '{tool_name}'",
+                                f"v{tool.current_version} ",
+                                f"with args: {args}",
                             )
 
                             # Execute through registry for enhanced tracking
