@@ -13,7 +13,7 @@
       "Bash(mkdir:*)",
       "Bash(black:*)",
       "Bash(python -m pytest tests/test_conversation_manager.py -v)",
-      "Bash(python:*)"
+      "Bash(claude doctor)"
     ],
     "deny": [],
     "ask": []
