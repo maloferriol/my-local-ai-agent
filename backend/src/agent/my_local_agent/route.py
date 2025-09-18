@@ -15,7 +15,7 @@ from opentelemetry.context import get_current
 
 from rich import print
 
-from src.tools import get_weather, get_weather_conditions, create_configured_registry
+from src.tools import get_weather, get_weather_conditions, create_configured_agent_registry
 from src.tools.registry import ToolRegistry
 import traceback
 
@@ -41,7 +41,7 @@ def ensure_tool_registry_initialized():
     global tool_registry
     if tool_registry is None:
         logger.info("Tool registry not initialized, creating configured registry...")
-        tool_registry = create_configured_registry()
+        tool_registry = create_configured_agent_registry()
         logger.info(f"Tool registry initialized with {len(tool_registry.tools)} tools")
 
 
@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
         logger.info("Database tables verified.")
     
     print("Initializing tool registry...")
-    tool_registry = create_configured_registry()
+    tool_registry = create_configured_agent_registry()
     logger.info(f"Tool registry initialized with {len(tool_registry.tools)} tools")
     
     yield

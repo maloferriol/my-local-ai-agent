@@ -7,7 +7,7 @@ while using the new tool system underneath.
 
 from typing import Optional
 from .registry import ToolRegistry
-from .builders import create_configured_registry
+from ..agent.my_local_agent.tools import create_configured_agent_registry
 
 # Lazy initialization of the configured registry
 _configured_registry: Optional[ToolRegistry] = None
@@ -24,7 +24,7 @@ def get_configured_registry() -> ToolRegistry:
     """
     global _configured_registry
     if _configured_registry is None:
-        _configured_registry = create_configured_registry()
+        _configured_registry = create_configured_agent_registry()
     return _configured_registry
 
 

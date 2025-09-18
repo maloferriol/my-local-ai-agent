@@ -12,7 +12,7 @@ from .models import Tool, ToolStatus, ToolVersion
 from .registry import ToolRegistry
 from .implementations.weather import get_weather_impl, get_weather_conditions_impl
 from .compatibility import get_weather, get_weather_conditions
-from .builders import create_configured_registry, register_default_tools
+from ..agent.my_local_agent.tools import create_configured_agent_registry, register_default_tools
 
 # Create a global registry instance (empty by default)
 tool_registry = ToolRegistry()
@@ -25,7 +25,7 @@ __all__ = [
     "ToolRegistry",
     "tool_registry",
     # Builder functions
-    "create_configured_registry",
+    "create_configured_agent_registry",
     "register_default_tools",
     # Backward compatibility functions
     "get_weather",
