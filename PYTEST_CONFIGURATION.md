@@ -29,7 +29,7 @@ This repository uses **pytest** as the test runner. The configuration is defined
 Simply run `pytest` from the repository root:
 
 ```bash
-$ pytest --cov=backend/
+pytest --cov=backend/
 ```
 
 The coverage report will be generated in the `htmlcov` directory.
