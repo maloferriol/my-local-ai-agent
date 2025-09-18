@@ -15,7 +15,7 @@ from opentelemetry.context import get_current
 
 from rich import print
 
-from src.tools import get_weather, get_weather_conditions, create_configured_agent_registry
+from .tools import create_configured_agent_registry
 from src.tools.registry import ToolRegistry
 import traceback
 
@@ -64,16 +64,16 @@ async def lifespan(app: FastAPI):
     Manage application startup and shutdown events.
     """
     global tool_registry
-    
+
     print("Application startup: Ensuring database tables exist...")
     with DatabaseManager() as db:
         db.create_init_tables()
         logger.info("Database tables verified.")
-    
+
     print("Initializing tool registry...")
     tool_registry = create_configured_agent_registry()
     logger.info(f"Tool registry initialized with {len(tool_registry.tools)} tools")
-    
+
     yield
     # On shutdown, you can add cleanup logic if needed
     print("Application shutdown.")
@@ -86,35 +86,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     lifespan=lifespan,
 )
-
-
-# Enhanced tool management using the registry
-def get_available_tools_dict() -> Dict[str, Any]:
-    """Get available tools as dictionary for backward compatibility."""
-    ensure_tool_registry_initialized()
-    
-    tools_dict = {}
-    for tool_name, tool in tool_registry.tools.items():
-        # Use the backward compatibility functions
-        if tool_name == "get_weather":
-            tools_dict[tool_name] = get_weather
-        elif tool_name == "get_weather_conditions":
-            tools_dict[tool_name] = get_weather_conditions
-        else:
-            # For new tools, use the tool's execute method
-            tools_dict[tool_name] = lambda *args, **kwargs: tool.execute(
-                *args, **kwargs
-            )
-    return tools_dict
-
-
-def get_available_tools_default() -> Dict[str, Any]:
-    """Get available tools, initializing if needed."""
-    return get_available_tools_dict()
-
-
-# For backward compatibility - will be populated lazily
-available_tools_default = {}
 
 
 @app.get("/conversation/{conversation_id}", response_model=Conversation)
@@ -344,21 +315,11 @@ async def _execute_tools(
                                 tool.average_execution_time_ms,
                             )
                         else:
-                            # Fallback to legacy tool execution
-                            function_to_call = get_available_tools_dict().get(tool_name)
-                            if not function_to_call:
-                                error_msg = f"Tool '{tool_name}' not found in registry or legacy tools."
-                                print(f"FAIL {error_msg}")
-                                logger.error(error_msg)
-                                raise ValueError(error_msg)
-
-                            args = tool_call.get("function", {}).get("arguments", {})
-                            tool_span.set_attribute("tool.arguments", json.dumps(args))
-                            print(
-                                f"Executing legacy tool '{tool_name}' with args: {args}"
-                            )
-                            result = function_to_call(**args)
-                            tool_span.set_attribute("tool.result", str(result))
+                            # Tool not found in registry
+                            error_msg = f"Tool '{tool_name}' not found in registry."
+                            print(f"FAIL {error_msg}")
+                            logger.error(error_msg)
+                            raise ValueError(error_msg)
                         # Save tool result using the conversation manager
                         conv_manager.add_tool_message(
                             content=str(result),
@@ -426,7 +387,8 @@ async def _stream_chat_with_tools_refactored(  # noqa: C901
         available_tools: List[Any] | None = None
         thinking_effort = None
         if model in ["gpt-oss:20b"]:
-            available_tools = list(get_available_tools_dict().values())
+            ensure_tool_registry_initialized()
+            available_tools = [tool.function for tool in tool_registry.tools.values()]
             thinking_effort = "low"
 
         tools_count = len(available_tools) if available_tools else 0
