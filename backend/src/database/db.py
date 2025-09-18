@@ -23,7 +23,7 @@ def get_default_db_file():
 
         test_db_file = os.environ.get("TEST_DB_FILE")
         if not test_db_file:
-            # Create a temporary file that will be shared across all test database connections
+            # Create a shared temporary file for test dbs.
             fd, test_db_file = tempfile.mkstemp(suffix=".db", prefix="test_")
             os.close(fd)  # Close file descriptor, but keep the file path
             os.environ["TEST_DB_FILE"] = test_db_file
@@ -441,14 +441,16 @@ class DatabaseManager:
         uuid: str = None,
     ) -> int:
         """Creates a new conversation and returns its ID."""
+        query = """INSERT INTO conversations
+                   (title, model_name, system_prompt,
+                   temperature, max_tokens, metadata, uuid)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)"""
         try:
             random_title = (
                 title if title != "" else DatabaseUtils.generate_random_name(3)
             )
             conversation_id = self.execute_query(
-                """INSERT INTO conversations 
-                   (title, model_name, system_prompt, temperature, max_tokens, metadata, uuid) 
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                query,
                 (
                     random_title,
                     model_name,
