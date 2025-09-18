@@ -16,7 +16,7 @@ from opentelemetry.context import get_current
 from rich import print
 
 from .tools import create_configured_agent_registry
-from src.tools.registry import ToolRegistry
+
 import traceback
 
 from src.database.db import DatabaseManager
@@ -32,17 +32,9 @@ logger = logging.getLogger(__name__)
 # Initialize tracer
 tracer = trace.get_tracer(__name__)
 
-# Global tool registry - will be initialized during startup
-tool_registry: ToolRegistry = None
-
-
-def ensure_tool_registry_initialized():
-    """Ensure tool registry is initialized, creating it if needed."""
-    global tool_registry
-    if tool_registry is None:
-        logger.info("Tool registry not initialized, creating configured registry...")
-        tool_registry = create_configured_agent_registry()
-        logger.info(f"Tool registry initialized with {len(tool_registry.tools)} tools")
+# Initialize tool registry at module level
+tool_registry = create_configured_agent_registry()
+logger.info(f"Tool registry initialized with {len(tool_registry.tools)} tools")
 
 
 def print_trace(ex: BaseException):
@@ -63,17 +55,10 @@ async def lifespan(app: FastAPI):
     """
     Manage application startup and shutdown events.
     """
-    global tool_registry
-
     print("Application startup: Ensuring database tables exist...")
     with DatabaseManager() as db:
         db.create_init_tables()
         logger.info("Database tables verified.")
-
-    print("Initializing tool registry...")
-    tool_registry = create_configured_agent_registry()
-    logger.info(f"Tool registry initialized with {len(tool_registry.tools)} tools")
-
     yield
     # On shutdown, you can add cleanup logic if needed
     print("Application shutdown.")
@@ -120,7 +105,6 @@ async def get_tool_stats():
     Returns:
         Tool registry statistics including usage metrics.
     """
-    ensure_tool_registry_initialized()
     return tool_registry.get_tool_stats()
 
 
@@ -133,7 +117,6 @@ async def get_tools():
     Returns:
         List of available tools with their versions and metadata.
     """
-    ensure_tool_registry_initialized()
     active_tools = tool_registry.get_active_tools()
     return [tool.to_dict() for tool in active_tools]
 
@@ -235,8 +218,19 @@ async def _stream_model_response(  # noqa: C901
                 if tool_calls := msg.get("tool_calls"):
                     for tool_call in tool_calls:
                         print("tool_call", tool_call)
-                        tool_call_chunks.append(tool_call)
-                        yield {"stage": "tool_call_chunk", "tool_call": tool_call}
+
+                        if tool_call.get("function"):
+                            print("tool_call function", tool_call.get("function"))
+                            data = {
+                                "function": {
+                                    "name": tool_call.get("function").get("name"),
+                                    "arguments": tool_call.get("function").get(
+                                        "arguments"
+                                    ),
+                                }
+                            }
+                            tool_call_chunks.append(data)
+                            yield {"stage": "tool_call_chunk", "tool_call": data}
 
             if thinking_chunks:
                 span.set_attribute("llm.thinking", "".join(thinking_chunks))
@@ -288,9 +282,11 @@ async def _execute_tools(
                         tool_span.set_attribute("tool.name", tool_name)
 
                         # Check if tool exists in registry first
-                        ensure_tool_registry_initialized()
-                        tool = tool_registry.get_tool(tool_name)
+                        # LLM returns the function name, so we look up by function name
+                        # This ensures we find the tool even if the tool name differs from function name
+                        tool = tool_registry.get_tool_by_function_name(tool_name)
                         if tool:
+                            print(f"Found tool in registry: {tool_name}")
                             # Enhanced tracing with tool metadata
                             tool_span.set_attribute(
                                 "tool.version", tool.current_version
@@ -306,7 +302,9 @@ async def _execute_tools(
                             )
 
                             # Execute through registry for enhanced tracking
-                            result = tool_registry.execute_tool(tool_name, **args)
+                            result = tool_registry.execute_tool_by_function_name(
+                                tool_name, **args
+                            )
 
                             # Add enhanced metrics
                             tool_span.set_attribute("tool.result", str(result))
@@ -315,6 +313,7 @@ async def _execute_tools(
                                 tool.average_execution_time_ms,
                             )
                         else:
+                            print(f"Tool '{tool_name}' not found in registry.")
                             # Tool not found in registry
                             error_msg = f"Tool '{tool_name}' not found in registry."
                             print(f"FAIL {error_msg}")
@@ -387,7 +386,8 @@ async def _stream_chat_with_tools_refactored(  # noqa: C901
         available_tools: List[Any] | None = None
         thinking_effort = None
         if model in ["gpt-oss:20b"]:
-            ensure_tool_registry_initialized()
+            # Here we provide the FUNCTION definition of the tool rather than the TOOL class instance
+            # This is because Ollama needs the function schema to properly call it
             available_tools = [tool.function for tool in tool_registry.tools.values()]
             thinking_effort = "low"
 
@@ -444,6 +444,7 @@ async def _stream_chat_with_tools_refactored(  # noqa: C901
                 conv_manager.add_assistant_message(
                     content=assistant_content,
                     thinking=assistant_thinking_content,
+                    tool_calls=tool_calls_this_turn,
                     model=model,
                 )
 

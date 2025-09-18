@@ -37,6 +37,13 @@ class ToolRegistry:
         """Get a tool by name."""
         return self.tools.get(name)
 
+    def get_tool_by_function_name(self, function_name: str) -> Optional[Tool]:
+        """Get a tool by its function name."""
+        for tool in self.tools.values():
+            if tool.function.__name__ == function_name:
+                return tool
+        return None
+
     def execute_tool(self, name: str, *args, **kwargs) -> Any:
         """Execute a tool by name."""
         tool = self.get_tool(name)
@@ -45,6 +52,19 @@ class ToolRegistry:
 
         if tool.status == ToolStatus.DISABLED:
             raise ValueError(f"Tool '{name}' is disabled")
+
+        return tool.execute(*args, **kwargs)
+
+    def execute_tool_by_function_name(self, function_name: str, *args, **kwargs) -> Any:
+        """Execute a tool by function name."""
+        tool = self.get_tool_by_function_name(function_name)
+        if not tool:
+            raise ValueError(
+                f"Tool with function '{function_name}' not found in registry"
+            )
+
+        if tool.status == ToolStatus.DISABLED:
+            raise ValueError(f"Tool with function '{function_name}' is disabled")
 
         return tool.execute(*args, **kwargs)
 
