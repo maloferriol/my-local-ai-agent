@@ -15,7 +15,7 @@ from opentelemetry.context import get_current
 
 from rich import print
 
-from .tools import create_configured_agent_registry
+from .tools import MyLocalAgentToolRegistry
 
 import traceback
 
@@ -32,8 +32,8 @@ logger = logging.getLogger(__name__)
 # Initialize tracer
 tracer = trace.get_tracer(__name__)
 
-# Initialize tool registry at module level
-tool_registry = create_configured_agent_registry()
+# Initialize tool registry for this agent
+tool_registry = MyLocalAgentToolRegistry.create_registry()
 logger.info(f"Tool registry initialized with {len(tool_registry.tools)} tools")
 
 
@@ -62,10 +62,6 @@ async def lifespan(app: FastAPI):
     yield
     # On shutdown, you can add cleanup logic if needed
     print("Application shutdown.")
-
-
-# This dependency provides a new, unconnected DatabaseManager instance.
-# Per-write DB model: routes do not own or inject DB connections
 
 
 app = FastAPI(
@@ -386,8 +382,6 @@ async def _stream_chat_with_tools_refactored(  # noqa: C901
         available_tools: List[Any] | None = None
         thinking_effort = None
         if model in ["gpt-oss:20b"]:
-            # Here we provide the FUNCTION definition of the tool rather than the TOOL class instance
-            # This is because Ollama needs the function schema to properly call it
             available_tools = [tool.function for tool in tool_registry.tools.values()]
             thinking_effort = "low"
 
