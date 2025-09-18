@@ -8,6 +8,10 @@ Export all models for easy importing.
 import importlib.util
 from pathlib import Path
 
+# Import new Phase 2 models
+from .planning import AgentPlan, PlanStep, PlanStatus
+from .tracing import ExecutionTrace, ExecutionSpan, SpanStatus
+
 # Get path to models.py in parent directory
 models_file = Path(__file__).parent.parent / "models.py"
 spec = importlib.util.spec_from_file_location("src_models", models_file)
@@ -19,9 +23,6 @@ Role = models_module.Role
 ChatMessage = models_module.ChatMessage
 Conversation = models_module.Conversation
 
-# Import new Phase 2 models
-from .planning import AgentPlan, PlanStep, PlanStatus
-from .tracing import ExecutionTrace, ExecutionSpan, SpanStatus
 
 __all__ = [
     # Core models
