@@ -15,13 +15,8 @@ from fastapi.testclient import TestClient
 
 # Mock environment before importing
 with patch.dict(os.environ, {"OLLAMA_URL": "http://localhost:11434"}):
-    from src.agent.my_local_agent.route import (
-        app,
-        print_trace,
-        _stream_model_response,
-        _execute_tools,
-        _stream_chat_with_tools_refactored,
-    )
+    from src.agent.my_local_agent.route import app
+    from src.utils.error_handling import print_trace
 
 
 @pytest.fixture(scope="function")
@@ -45,9 +40,17 @@ def mock_conversation_manager():
         mock_instance = MagicMock()
         mock.create_new.return_value = mock_instance
         mock.load_existing.return_value = mock_instance
-        mock_instance.get_current_conversation.return_value = MagicMock(
-            id=1, model="test-model", messages=[]
-        )
+
+        # Create a more complete mock message
+        mock_message = MagicMock()
+        mock_message.role.value = "user"
+
+        mock_conversation = MagicMock()
+        mock_conversation.id = 1
+        mock_conversation.model = "test-model"
+        mock_conversation.messages = [mock_message]
+
+        mock_instance.get_current_conversation.return_value = mock_conversation
         yield mock
 
 
@@ -133,277 +136,28 @@ def test_get_enhanced_conversation_summary_success(test_client):
         assert response.json() == {"summary": "test summary"}
 
 
-def test_stream_model_response_thinking_content():
-    """Test streaming with thinking and content chunks."""
+# Test for streaming model response moved to test_services.py
 
-    async def run_test():
-        with patch(
-            "src.agent.my_local_agent.route.tracer.start_as_current_span"
-        ) as mock_span:
-            mock_span_instance = MagicMock()
-            mock_span_instance.__enter__ = MagicMock(return_value=mock_span_instance)
-            mock_span_instance.__exit__ = MagicMock(return_value=None)
-            mock_span.return_value = mock_span_instance
 
-            with patch("src.agent.my_local_agent.route.ollama_client") as mock_client:
+# Test for Ollama error handling moved to test_services.py
 
-                async def mock_chat_generator():
-                    yield {
-                        "message": {"thinking": "thinking...", "content": "part1"},
-                        "done": False,
-                    }
-                    yield {"message": {"content": "part2"}, "done": False}
-                    yield {"message": {}, "done": True}
 
-                mock_client.chat = AsyncMock(return_value=mock_chat_generator())
+# Test for tool execution moved to test_services.py
 
-                messages = [{"role": "user", "content": "test"}]
-                generator = _stream_model_response(messages, "test-model", "low", None)
 
-                results = []
-                async for result in generator:
-                    results.append(result)
+# Test for tool not found moved to test_services.py
 
-                # Should have thinking and content chunks
-                thinking_chunks = [r for r in results if r.get("stage") == "thinking"]
-                content_chunks = [r for r in results if r.get("stage") == "content"]
-                assert len(thinking_chunks) > 0
-                assert len(content_chunks) > 0
 
-    anyio.run(run_test)
+# Test for tool execution error moved to test_services.py
 
 
-def test_stream_model_response_ollama_error():
-    """Test Ollama client error handling in streaming."""
+# Test for successful tool execution moved to test_services.py
 
-    async def run_test():
-        with patch(
-            "src.agent.my_local_agent.route.tracer.start_as_current_span"
-        ) as mock_span:
-            mock_span_instance = MagicMock()
-            mock_span_instance.__enter__ = MagicMock(return_value=mock_span_instance)
-            mock_span_instance.__exit__ = MagicMock(return_value=None)
-            mock_span.return_value = mock_span_instance
 
-            with patch("src.agent.my_local_agent.route.ollama_client") as mock_client:
-                mock_client.chat.side_effect = Exception("Ollama connection failed")
+# Test for chat orchestration error moved to test_services.py
 
-                messages = [{"role": "user", "content": "test"}]
-                generator = _stream_model_response(messages, "test-model", None, None)
 
-                with pytest.raises(Exception):
-                    async for _ in generator:
-                        pass
-
-    anyio.run(run_test)
-
-
-def test_execute_tools_missing_tool_name():
-    """Test tool execution with missing tool name."""
-
-    async def run_test():
-        mock_conv_manager = MagicMock()
-        tool_calls = [{"function": {}}]  # Missing 'name' field
-
-        with patch(
-            "src.agent.my_local_agent.route.tracer.start_as_current_span"
-        ) as mock_span:
-            mock_span_instance = MagicMock()
-            mock_span_instance.__enter__ = MagicMock(return_value=mock_span_instance)
-            mock_span_instance.__exit__ = MagicMock(return_value=None)
-            mock_span.return_value = mock_span_instance
-
-            generator = _execute_tools(tool_calls, mock_conv_manager)
-
-            results = []
-            async for result in generator:
-                results.append(result)
-
-            # Should handle missing tool name gracefully
-            assert len(results) == 0
-
-    anyio.run(run_test)
-
-
-def test_execute_tools_tool_not_found():
-    """Test tool execution when tool is not in registry."""
-
-    async def run_test():
-        mock_conv_manager = MagicMock()
-        tool_calls = [{"function": {"name": "nonexistent_tool", "arguments": {}}}]
-
-        with patch(
-            "src.agent.my_local_agent.route.tracer.start_as_current_span"
-        ) as mock_span:
-            mock_span_instance = MagicMock()
-            mock_span_instance.__enter__ = MagicMock(return_value=mock_span_instance)
-            mock_span_instance.__exit__ = MagicMock(return_value=None)
-            mock_span.return_value = mock_span_instance
-
-            with patch("src.agent.my_local_agent.route.tool_registry") as mock_registry:
-                mock_registry.get_tool_by_function_name.return_value = None
-
-                generator = _execute_tools(tool_calls, mock_conv_manager)
-
-                results = []
-                async for result in generator:
-                    results.append(result)
-
-                # Should yield tool_error for nonexistent tool
-                assert len(results) == 1
-                assert results[0]["stage"] == "tool_error"
-                assert "not found in registry" in results[0]["error"]
-
-    anyio.run(run_test)
-
-
-def test_execute_tools_execution_error():
-    """Test tool execution error handling."""
-
-    async def run_test():
-        mock_conv_manager = MagicMock()
-        tool_calls = [{"function": {"name": "failing_tool", "arguments": {}}}]
-
-        with patch(
-            "src.agent.my_local_agent.route.tracer.start_as_current_span"
-        ) as mock_span:
-            mock_span_instance = MagicMock()
-            mock_span_instance.__enter__ = MagicMock(return_value=mock_span_instance)
-            mock_span_instance.__exit__ = MagicMock(return_value=None)
-            mock_span.return_value = mock_span_instance
-
-            with patch("src.agent.my_local_agent.route.tool_registry") as mock_registry:
-                mock_tool = MagicMock()
-                mock_tool.current_version = "1.0"
-                mock_tool.category = "test"
-                mock_tool.status.value = "active"
-                mock_tool.call_count = 5
-                mock_tool.average_execution_time_ms = 100
-                mock_registry.get_tool_by_function_name.return_value = mock_tool
-                mock_registry.execute_tool_by_function_name.side_effect = Exception(
-                    "Tool execution failed"
-                )
-
-                generator = _execute_tools(tool_calls, mock_conv_manager)
-
-                results = []
-                async for result in generator:
-                    results.append(result)
-
-                # Should yield tool_error for execution failure
-                assert len(results) == 1
-                assert results[0]["stage"] == "tool_error"
-                assert "Tool execution failed" in results[0]["error"]
-
-    anyio.run(run_test)
-
-
-def test_execute_tools_successful_execution():
-    """Test successful tool execution path."""
-
-    async def run_test():
-        mock_conv_manager = MagicMock()
-        tool_calls = [
-            {"function": {"name": "working_tool", "arguments": {"param": "value"}}}
-        ]
-
-        with patch(
-            "src.agent.my_local_agent.route.tracer.start_as_current_span"
-        ) as mock_span:
-            mock_span_instance = MagicMock()
-            mock_span_instance.__enter__ = MagicMock(return_value=mock_span_instance)
-            mock_span_instance.__exit__ = MagicMock(return_value=None)
-            mock_span.return_value = mock_span_instance
-
-            with patch("src.agent.my_local_agent.route.tool_registry") as mock_registry:
-                mock_tool = MagicMock()
-                mock_tool.current_version = "1.0"
-                mock_tool.category = "test"
-                mock_tool.status.value = "active"
-                mock_tool.call_count = 5
-                mock_tool.average_execution_time_ms = 100
-                mock_registry.get_tool_by_function_name.return_value = mock_tool
-                mock_registry.execute_tool_by_function_name.return_value = "tool result"
-
-                generator = _execute_tools(tool_calls, mock_conv_manager)
-
-                results = []
-                async for result in generator:
-                    results.append(result)
-
-                # Should yield successful tool result
-                assert len(results) == 1
-                assert results[0]["stage"] == "tool_result"
-                assert results[0]["tool"] == "working_tool"
-                assert results[0]["result"] == "tool result"
-
-    anyio.run(run_test)
-
-
-def test_stream_chat_with_tools_model_error():
-    """Test chat orchestration with model streaming error."""
-
-    async def run_test():
-        mock_conv_manager = MagicMock()
-        mock_conv_manager.get_current_conversation.return_value = MagicMock(
-            id=1, messages=[]
-        )
-
-        with patch(
-            "src.agent.my_local_agent.route._stream_model_response"
-        ) as mock_stream:
-            mock_stream.side_effect = Exception("Model streaming error")
-
-            parent_ctx = MagicMock()
-            generator = _stream_chat_with_tools_refactored(
-                "test-model", mock_conv_manager, parent_ctx
-            )
-
-            results = []
-            with pytest.raises(Exception):
-                async for result in generator:
-                    results.append(result)
-
-    anyio.run(run_test)
-
-
-def test_stream_chat_with_tools_iteration_error():
-    """Test error in chat loop iteration."""
-
-    async def run_test():
-        mock_conv_manager = MagicMock()
-        mock_conv_manager.get_current_conversation.return_value = MagicMock(
-            id=1, messages=[]
-        )
-
-        async def failing_stream():
-            yield {"stage": "content", "response": "test"}
-            raise Exception("Stream iteration error")
-
-        with patch(
-            "src.agent.my_local_agent.route._stream_model_response"
-        ) as mock_stream:
-            mock_stream.return_value = failing_stream()
-
-            parent_ctx = MagicMock()
-            generator = _stream_chat_with_tools_refactored(
-                "test-model", mock_conv_manager, parent_ctx
-            )
-
-            results = []
-            try:
-                async for result in generator:
-                    if isinstance(result, str):
-                        parsed = json.loads(result.strip())
-                        results.append(parsed)
-            except Exception:
-                pass
-
-            # Should contain error response
-            error_responses = [r for r in results if r.get("stage") == "error"]
-            assert len(error_responses) > 0
-
-    anyio.run(run_test)
+# Test for chat iteration error moved to test_services.py
 
 
 def test_invoke_no_messages_error(test_client):
@@ -434,7 +188,9 @@ def test_invoke_conversation_not_found(test_client):
         assert "Conversation not found" in response.json()["detail"]
 
 
-@patch("src.agent.my_local_agent.route._stream_chat_with_tools_refactored")
+@patch(
+    "src.agent.my_local_agent.route.chat_orchestration_service.stream_chat_with_tools"
+)
 def test_invoke_streaming_response_error(
     mock_stream, test_client, mock_conversation_manager
 ):
@@ -459,7 +215,7 @@ def test_invoke_streaming_response_error(
 def test_invoke_with_thinking_model(test_client, mock_conversation_manager):
     """Test invoke with thinking effort for specific model."""
     with patch(
-        "src.agent.my_local_agent.route._stream_chat_with_tools_refactored"
+        "src.agent.my_local_agent.route.chat_orchestration_service.stream_chat_with_tools"
     ) as mock_stream:
 
         async def mock_generator(*args, **kwargs):

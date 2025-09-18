@@ -65,7 +65,7 @@ def test_get_nonexistent_conversation(test_client):
     assert response.json()["detail"] == "Conversation not found"
 
 
-@patch("src.agent.my_local_agent.route.ollama_client")
+@patch("src.agent.my_local_agent.route.llm_service.ollama_client")
 def test_create_new_conversation_e2e(
     mock_ollama_client, test_client, mock_ollama_response
 ):
@@ -110,7 +110,7 @@ def test_create_new_conversation_e2e(
     assert len(content_responses) > 0
 
 
-@patch("src.agent.my_local_agent.route.ollama_client")
+@patch("src.agent.my_local_agent.route.llm_service.ollama_client")
 def test_conversation_with_tool_calls_e2e(mock_ollama_client, test_client):
     """
     Test conversation flow that includes tool calls.
@@ -185,7 +185,7 @@ def test_conversation_with_tool_calls_e2e(mock_ollama_client, test_client):
     assert len(finalize_responses) > 0
 
 
-@patch("src.agent.my_local_agent.route.ollama_client")
+@patch("src.agent.my_local_agent.route.llm_service.ollama_client")
 def test_continue_existing_conversation_e2e(
     mock_ollama_client, test_client, mock_ollama_response
 ):
