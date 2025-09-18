@@ -7,6 +7,8 @@ import json
 
 from src.conversation import ConversationManager
 from src.models import Role
+from src.models.planning import AgentPlan, PlanStep
+from src.models.tracing import ExecutionTrace
 
 # Import the function from conftest
 from .conftest import managed_db_connection
@@ -248,3 +250,434 @@ def test_add_message_without_active_conversation(add_message_method, args):
     # Act & Assert
     with pytest.raises(RuntimeError, match=expected_error):
         method_to_call(**args)
+
+
+def test_json_decode_error_in_load_existing():
+    """
+    Test that load_existing handles JSON decode errors in tool_calls gracefully.
+    """
+    # Arrange: Create conversation with malformed JSON tool_calls
+    with managed_db_connection() as db:
+        conv_id = db.create_conversation(title="JSON Error Test")
+        db.insert_message(
+            conv_id, 1, "assistant", "Response", tool_calls="invalid json"
+        )
+
+    # Act
+    loaded_manager = ConversationManager.load_existing(conv_id)
+
+    # Assert - should load successfully with tool_calls as None
+    assert loaded_manager is not None
+    loaded_convo = loaded_manager.get_current_conversation()
+    assert loaded_convo.get_message_count() == 1
+    assert loaded_convo.messages[0].tool_calls is None
+
+
+def test_get_conversation_history_with_limit(conversation_manager_fixture):
+    """
+    Test get_conversation_history with limit parameter.
+    """
+    # Arrange - create additional conversations for history
+    manager2 = ConversationManager.create_new(title="Second", model="test")
+    manager3 = ConversationManager.create_new(title="Third", model="test")
+
+    # Add all to first manager's history manually for testing
+    conversation_manager_fixture.conversation_history.extend(
+        [manager2.current_conversation, manager3.current_conversation]
+    )
+
+    # Act & Assert - no limit returns all
+    all_history = conversation_manager_fixture.get_conversation_history()
+    assert len(all_history) == 3
+
+    # Act & Assert - with limit
+    limited_history = conversation_manager_fixture.get_conversation_history(limit=2)
+    assert len(limited_history) == 2
+    assert limited_history == conversation_manager_fixture.conversation_history[-2:]
+
+
+def test_load_conversation_method(conversation_manager_fixture, db_manager_fixture):
+    """
+    Test the load_conversation instance method.
+    """
+    # Arrange - create a second conversation in DB
+    with managed_db_connection() as db:
+        conv_id = db.create_conversation(title="Second Conversation")
+        db.insert_message(conv_id, 1, "user", "Hello second")
+
+    # Act
+    loaded_convo = conversation_manager_fixture.load_conversation(conv_id)
+
+    # Assert
+    assert loaded_convo is not None
+    assert loaded_convo.id == conv_id
+    assert loaded_convo.title == "Second Conversation"
+    assert conversation_manager_fixture.current_conversation == loaded_convo
+    assert loaded_convo.get_message_count() == 1
+
+
+def test_load_conversation_not_found(conversation_manager_fixture):
+    """
+    Test load_conversation with non-existent ID returns None.
+    """
+    result = conversation_manager_fixture.load_conversation(999)
+    assert result is None
+
+
+def test_update_conversation_title_no_active_conversation():
+    """
+    Test update_conversation_title raises error when no active conversation.
+    """
+    manager = ConversationManager.create_new(title="Test", model="test")
+    manager.current_conversation = None
+
+    with pytest.raises(RuntimeError, match="No active conversation"):
+        manager.update_conversation_title("New Title")
+
+
+def test_get_conversation_summary_no_active_conversation():
+    """
+    Test get_conversation_summary returns empty dict when no active conversation.
+    """
+    manager = ConversationManager.create_new(title="Test", model="test")
+    manager.current_conversation = None
+
+    summary = manager.get_conversation_summary()
+    assert summary == {}
+
+
+def test_get_conversation_summary_with_messages(conversation_manager_fixture):
+    """
+    Test get_conversation_summary with messages.
+    """
+    # Arrange - add messages
+    conversation_manager_fixture.add_user_message("First message", "test")
+    conversation_manager_fixture.add_assistant_message("Response", model="test")
+
+    # Act
+    summary = conversation_manager_fixture.get_conversation_summary()
+
+    # Assert
+    assert summary["message_count"] == 2
+    assert summary["last_message"] == "Response"
+    assert "id" in summary
+    assert "title" in summary
+    assert "model" in summary
+    assert "created_at" in summary
+    assert "updated_at" in summary
+
+
+def test_export_conversation_current(conversation_manager_fixture):
+    """
+    Test export_conversation for current conversation.
+    """
+    # Arrange - add a message
+    conversation_manager_fixture.add_user_message("Test export", "test")
+
+    # Act
+    exported = conversation_manager_fixture.export_conversation()
+
+    # Assert
+    assert "id" in exported
+    assert exported["title"] == "Test Conversation"
+    assert "messages" in exported
+    assert len(exported["messages"]) == 1
+
+
+def test_export_conversation_not_found():
+    """
+    Test export_conversation with non-existent ID raises error.
+    """
+    manager = ConversationManager.create_new(title="Test", model="test")
+
+    with pytest.raises(ValueError, match="Conversation 999 not found"):
+        manager.export_conversation(999)
+
+
+def test_export_conversation_no_active():
+    """
+    Test export_conversation without active conversation raises error.
+    """
+    manager = ConversationManager.create_new(title="Test", model="test")
+    manager.current_conversation = None
+
+    with pytest.raises(RuntimeError, match="No active conversation"):
+        manager.export_conversation()
+
+
+def test_close_conversation(conversation_manager_fixture):
+    """
+    Test close_conversation method.
+    """
+    # Ensure we have an active conversation
+    assert conversation_manager_fixture.current_conversation is not None
+
+    # Act
+    conversation_manager_fixture.close_conversation()
+
+    # Assert
+    assert conversation_manager_fixture.current_conversation is None
+
+
+def test_close_conversation_already_none():
+    """
+    Test close_conversation when already None doesn't crash.
+    """
+    manager = ConversationManager.create_new(title="Test", model="test")
+    manager.current_conversation = None
+
+    # Should not raise error
+    manager.close_conversation()
+    assert manager.current_conversation is None
+
+
+# Phase 2 Planning Tests
+
+
+def test_create_plan(conversation_manager_fixture):
+    """
+    Test creating a new execution plan.
+    """
+    # Act
+    plan = conversation_manager_fixture.create_plan(
+        title="Test Plan",
+        description="A test plan",
+        steps=[
+            {"title": "Step 1", "description": "First step", "priority": 1},
+            {"title": "Step 2", "description": "Second step", "priority": 2},
+        ],
+    )
+
+    # Assert
+    assert plan is not None
+    assert plan.title == "Test Plan"
+    assert plan.description == "A test plan"
+    assert len(plan.steps) == 2
+    assert conversation_manager_fixture.current_plan == plan
+    assert plan in conversation_manager_fixture.plan_history
+
+
+def test_create_plan_no_steps(conversation_manager_fixture):
+    """
+    Test creating a plan without steps.
+    """
+    plan = conversation_manager_fixture.create_plan(
+        title="Empty Plan", description="Plan with no steps"
+    )
+
+    assert len(plan.steps) == 0
+
+
+def test_execute_plan(conversation_manager_fixture):
+    """
+    Test executing a plan.
+    """
+    # Arrange
+    plan = conversation_manager_fixture.create_plan(
+        title="Execute Test",
+        description="Test execution",
+        steps=[{"title": "Test Step", "description": "Step to execute"}],
+    )
+
+    # Act
+    result = conversation_manager_fixture.execute_plan(plan)
+
+    # Assert
+    assert result == plan
+    assert plan.is_complete() or plan.has_failed_steps()
+
+
+def test_execute_plan_current(conversation_manager_fixture):
+    """
+    Test executing current plan.
+    """
+    # Arrange
+    conversation_manager_fixture.create_plan(
+        title="Current Plan",
+        description="Test current plan execution",
+        steps=[{"title": "Current Step", "description": "Step to execute"}],
+    )
+
+    # Act - execute without specifying plan
+    result = conversation_manager_fixture.execute_plan()
+
+    # Assert
+    assert result is not None
+
+
+def test_execute_plan_no_plan_available(conversation_manager_fixture):
+    """
+    Test executing plan when no plan is available.
+    """
+    with pytest.raises(
+        ValueError, match="No plan provided and no current plan available"
+    ):
+        conversation_manager_fixture.execute_plan()
+
+
+def test_get_current_plan(conversation_manager_fixture):
+    """
+    Test get_current_plan method.
+    """
+    # Initially None
+    assert conversation_manager_fixture.get_current_plan() is None
+
+    # Create plan
+    plan = conversation_manager_fixture.create_plan("Test", "Description")
+    assert conversation_manager_fixture.get_current_plan() == plan
+
+
+def test_get_plan_history(conversation_manager_fixture):
+    """
+    Test get_plan_history method.
+    """
+    # Initially empty
+    assert len(conversation_manager_fixture.get_plan_history()) == 0
+
+    # Create plans
+    plan1 = conversation_manager_fixture.create_plan("Plan 1", "First plan")
+    plan2 = conversation_manager_fixture.create_plan("Plan 2", "Second plan")
+
+    history = conversation_manager_fixture.get_plan_history()
+    assert len(history) == 2
+    assert plan1 in history
+    assert plan2 in history
+
+
+# Phase 2 Tracing Tests
+
+
+def test_start_trace(conversation_manager_fixture):
+    """
+    Test starting an execution trace.
+    """
+    # Act
+    trace = conversation_manager_fixture.start_trace(
+        name="Test Trace", description="A test trace"
+    )
+
+    # Assert
+    assert trace is not None
+    assert trace.name == "Test Trace"
+    assert trace.description == "A test trace"
+    assert conversation_manager_fixture.current_trace == trace
+
+
+def test_create_span(conversation_manager_fixture):
+    """
+    Test creating execution spans.
+    """
+    # Arrange
+    conversation_manager_fixture.start_trace("Test Trace")
+
+    # Act - create root span
+    root_span = conversation_manager_fixture.create_span("root_operation")
+
+    # Assert
+    assert root_span is not None
+    assert root_span.operation_name == "root_operation"
+
+
+def test_create_span_with_parent(conversation_manager_fixture):
+    """
+    Test creating child spans.
+    """
+    # Arrange
+    trace = conversation_manager_fixture.start_trace("Test Trace")
+    root_span = conversation_manager_fixture.create_span("root_operation")
+
+    # Act - create child span
+    child_span = conversation_manager_fixture.create_span(
+        "child_operation", parent_span_id=root_span.span_id
+    )
+
+    # Assert
+    assert child_span is not None
+    assert child_span.operation_name == "child_operation"
+
+
+def test_create_span_no_active_trace(conversation_manager_fixture):
+    """
+    Test creating span without active trace raises error.
+    """
+    with pytest.raises(ValueError, match="No active trace"):
+        conversation_manager_fixture.create_span("test_operation")
+
+
+def test_end_trace(conversation_manager_fixture):
+    """
+    Test ending an execution trace.
+    """
+    # Arrange
+    trace = conversation_manager_fixture.start_trace("Test Trace")
+
+    # Act
+    ended_trace = conversation_manager_fixture.end_trace()
+
+    # Assert
+    assert ended_trace == trace
+    assert conversation_manager_fixture.current_trace is None
+    assert trace in conversation_manager_fixture.execution_history
+
+
+def test_end_trace_no_active_trace(conversation_manager_fixture):
+    """
+    Test ending trace when no active trace raises error.
+    """
+    with pytest.raises(ValueError, match="No active trace to end"):
+        conversation_manager_fixture.end_trace()
+
+
+def test_get_current_trace(conversation_manager_fixture):
+    """
+    Test get_current_trace method.
+    """
+    # Initially None
+    assert conversation_manager_fixture.get_current_trace() is None
+
+    # Start trace
+    trace = conversation_manager_fixture.start_trace("Test Trace")
+    assert conversation_manager_fixture.get_current_trace() == trace
+
+
+def test_get_execution_history(conversation_manager_fixture):
+    """
+    Test get_execution_history method.
+    """
+    # Initially empty
+    assert len(conversation_manager_fixture.get_execution_history()) == 0
+
+    # Create and end traces
+    trace1 = conversation_manager_fixture.start_trace("Trace 1")
+    conversation_manager_fixture.end_trace()
+
+    trace2 = conversation_manager_fixture.start_trace("Trace 2")
+    conversation_manager_fixture.end_trace()
+
+    history = conversation_manager_fixture.get_execution_history()
+    assert len(history) == 2
+    assert trace1 in history
+    assert trace2 in history
+
+
+def test_get_enhanced_summary(conversation_manager_fixture):
+    """
+    Test get_enhanced_summary with planning and tracing info.
+    """
+    # Arrange - add messages, plans, and traces
+    conversation_manager_fixture.add_user_message("Test message", "test")
+    conversation_manager_fixture.create_plan("Test Plan", "Description")
+
+    trace = conversation_manager_fixture.start_trace("Test Trace")
+    conversation_manager_fixture.end_trace()
+
+    # Act
+    summary = conversation_manager_fixture.get_enhanced_summary()
+
+    # Assert
+    assert "planning" in summary
+    assert "tracing" in summary
+    assert "performance" in summary
+    assert summary["planning"]["total_plans"] == 1
+    assert summary["tracing"]["total_traces"] == 1
+    assert summary["performance"]["total_tokens"] >= 0
