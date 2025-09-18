@@ -7,54 +7,37 @@ from ...tools.implementations.weather import (
 )
 
 
-def create_weather_tools() -> List[Tool]:
-    """
-    Create weather-related tools.
+class MyLocalAgentToolRegistry:
+    """Tool registry manager for MyLocalAgent with a clean per-agent pattern."""
 
-    Returns:
-        List[Tool]: List of weather tools
-    """
-    return [
-        Tool(
-            name="get_weather",
-            description="Get the current temperature for a city",
-            function=get_weather_impl,
-            category="weather",
-            tags=["weather", "temperature", "city"],
-            author="LocalAgent Team",
-            current_version="1.0.0",
-        ),
-        Tool(
-            name="get_weather_conditions",
-            description="Get the weather conditions for a city",
-            function=get_weather_conditions_impl,
-            category="weather",
-            tags=["weather", "conditions", "city"],
-            author="LocalAgent Team",
-            current_version="1.0.0",
-        ),
-    ]
+    @staticmethod
+    def get_available_tools() -> List[Tool]:
+        """Get all available tools for this agent."""
+        return [
+            Tool(
+                name="get_weather",
+                description="Get the current temperature for a city",
+                function=get_weather_impl,
+                category="weather",
+                tags=["weather", "temperature", "city"],
+                author="LocalAgent Team",
+                current_version="1.0.0",
+            ),
+            Tool(
+                name="get_weather_conditions",
+                description="Get the weather conditions for a city",
+                function=get_weather_conditions_impl,
+                category="weather",
+                tags=["weather", "conditions", "city"],
+                author="LocalAgent Team",
+                current_version="1.0.0",
+            ),
+        ]
 
-
-def register_default_tools(registry: ToolRegistry) -> None:
-    """
-    Register default tools with the provided registry for the agent.
-
-    Args:
-        registry: The tool registry to register tools with
-    """
-    # Register weather tools
-    for tool in create_weather_tools():
-        registry.register_tool(tool)
-
-
-def create_configured_agent_registry() -> ToolRegistry:
-    """
-    Create a fully configured tool registry with default tools for the agent.
-
-    Returns:
-        ToolRegistry: Configured registry with default tools
-    """
-    registry = ToolRegistry()
-    register_default_tools(registry)
-    return registry
+    @classmethod
+    def create_registry(cls) -> ToolRegistry:
+        """Create a configured tool registry for this agent."""
+        registry = ToolRegistry()
+        for tool in cls.get_available_tools():
+            registry.register_tool(tool)
+        return registry
