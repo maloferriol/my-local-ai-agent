@@ -131,7 +131,7 @@ def test_conversation_with_tool_calls_e2e(mock_ollama_client, test_client):
                     "tool_calls": [
                         {
                             "function": {
-                                "name": "get_weather",
+                                "name": "get_weather_impl",
                                 "arguments": {"city": "London"},
                             }
                         }
@@ -175,7 +175,7 @@ def test_conversation_with_tool_calls_e2e(mock_ollama_client, test_client):
     # Should contain tool results
     tool_result_responses = [r for r in responses if r.get("stage") == "tool_result"]
     assert len(tool_result_responses) > 0
-    assert tool_result_responses[0]["tool"] == "get_weather"
+    assert tool_result_responses[0]["tool"] == "get_weather_impl"
 
     # Should contain content responses
     content_responses = [r for r in responses if r.get("stage") == "content"]
