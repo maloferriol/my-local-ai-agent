@@ -12,16 +12,12 @@ from .models import Tool, ToolStatus, ToolVersion
 from .registry import ToolRegistry
 from .implementations.weather import get_weather_impl, get_weather_conditions_impl
 
-# Create a global registry instance (empty by default)
-tool_registry = ToolRegistry()
-
 __all__ = [
     # Core models and registry
     "Tool",
     "ToolStatus",
     "ToolVersion",
     "ToolRegistry",
-    "tool_registry",
     # Implementation functions
     "get_weather_impl",
     "get_weather_conditions_impl",
