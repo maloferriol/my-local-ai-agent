@@ -4,7 +4,7 @@ Unit tests for tools/registry.py - Tool registry management.
 
 import pytest
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from src.tools.registry import ToolRegistry
 from src.tools.models import Tool, ToolStatus
@@ -109,7 +109,7 @@ class TestToolRegistry:
         assert "another_tool" in registry.tool_categories["math"]
 
     def test_register_tool_prevents_duplicates_in_category(self, registry, sample_tool):
-        """Test that registering the same tool twice doesn't create duplicates in category."""
+        """Test duplicate tool registration in category."""
         registry.register_tool(sample_tool)
         registry.register_tool(sample_tool)  # Register again
 
@@ -336,11 +336,13 @@ class TestToolRegistry:
         registry.register_tool(sample_tool)
 
         mock_logger.info.assert_called_once_with(
-            f"Registered tool: {sample_tool.name} v{sample_tool.current_version}"
+            f"Registered tool: {sample_tool.name} " f"v{sample_tool.current_version}"
         )
 
     def test_integration_multiple_operations(self, registry):
-        """Test integration scenario with multiple operations."""
+        """
+        Test integration scenario with multiple operations.
+        """
 
         # Create multiple tools
         def add_func(x: int, y: int) -> int:

@@ -7,8 +7,6 @@ import json
 
 from src.conversation import ConversationManager
 from src.models import Role
-from src.models.planning import AgentPlan, PlanStep
-from src.models.tracing import ExecutionTrace
 
 # Import the function from conftest
 from .conftest import managed_db_connection
@@ -221,7 +219,7 @@ def test_update_conversation_title(conversation_manager_fixture, db_manager_fixt
     current_convo = conversation_manager_fixture.get_current_conversation()
     assert current_convo.title == new_title
 
-    # Assert that the database was NOT updated (since the method doesn't implement DB updates)
+    # Assert that the database was NOT updated
     db_convo = db_manager_fixture.get_conversation(conversation_id)
     assert db_convo["title"] == "Test Conversation"  # Original title from fixture
 
@@ -583,7 +581,7 @@ def test_create_span_with_parent(conversation_manager_fixture):
     Test creating child spans.
     """
     # Arrange
-    trace = conversation_manager_fixture.start_trace("Test Trace")
+    conversation_manager_fixture.start_trace("Test Trace")
     root_span = conversation_manager_fixture.create_span("root_operation")
 
     # Act - create child span
@@ -668,7 +666,7 @@ def test_get_enhanced_summary(conversation_manager_fixture):
     conversation_manager_fixture.add_user_message("Test message", "test")
     conversation_manager_fixture.create_plan("Test Plan", "Description")
 
-    trace = conversation_manager_fixture.start_trace("Test Trace")
+    conversation_manager_fixture.start_trace("Test Trace")
     conversation_manager_fixture.end_trace()
 
     # Act

@@ -294,7 +294,7 @@ async def _execute_tools(
                             print(
                                 f"Executing tool '{tool_name}'",
                                 f"v{tool.current_version} ",
-                                f"with args: {args}"
+                                f"with args: {args}",
                             )
 
                             # Execute through registry for enhanced tracking
