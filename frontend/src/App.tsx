@@ -6,6 +6,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ProcessedEvent } from "@/components/ActivityTimeline";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { ChatMessagesView } from "@/components/ChatMessagesView";
+import { ConversationsSidebar } from "@/components/ConversationsSidebar";
 import { getAgentResponse, getConversation } from "@/lib/apis/agent";
 import { useSelectedAgent } from "@/hooks/useSelectedAgent";
 
@@ -25,6 +26,9 @@ export default function App() {
   const { selectedAgent, setSelectedAgent } = useSelectedAgent();
   const { conversationId } = useParams<{ conversationId: string }>();
   const navigate = useNavigate();
+
+  // sidebar state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     const fetchConversation = async () => {
@@ -255,8 +259,26 @@ export default function App() {
     window.location.reload();
   }, []);
 
+  const handleNavigateHome = useCallback(() => {
+    setChats([]);
+    setProcessedEventsTimeline([]);
+    setHistoricalActivities({});
+    setThinkingContent("");
+    setIsThinking(false);
+  }, []);
+
   return (
     <div className="flex h-screen bg-neutral-800 text-neutral-100 font-sans antialiased">
+      {/* Show sidebar only when viewing conversations (not on welcome screen) */}
+      {chats.length > 0 && (
+        <ConversationsSidebar
+          agentURL="agent/my_local_agent"
+          isCollapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onNewConversation={handleNavigateHome}
+        />
+      )}
+
       <main className="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full">
         <div
           className={`flex-1 overflow-y-auto ${chats.length === 0 ? "flex" : ""}`}
@@ -280,6 +302,7 @@ export default function App() {
               agentControl={{selectedAgent, setSelectedAgent}}
               thinkingContent={thinkingContent}
               isThinking={isThinking}
+              onNavigateHome={handleNavigateHome}
             />
           )}
         </div>
