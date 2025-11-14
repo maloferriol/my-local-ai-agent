@@ -10,7 +10,8 @@
       "Bash(PYTHONTRACEMALLOC=1 python -m pytest:*)",
       "Bash(claude doctor)",
       "Bash(mkdir:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []

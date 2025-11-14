@@ -1,0 +1,242 @@
+FRONTEND ARCHITECTURE DIAGRAM
+
+=================================
+HTTP REQUEST / RESPONSE FLOW
+=================================
+
+Browser / React App
+        |
+        v
+    main.tsx
+        |
+        +---> BrowserRouter (React Router v7)
+        |
+        +---> Routes
+        |     |
+        |     +---> Route "/" -> App
+        |     |
+        |     +---> Route "/c/:conversationId" -> App
+        |
+        +---> App.tsx (Main Component)
+              |
+              +---> useParams() -> conversationId
+              |
+              +---> useNavigate() -> navigate()
+              |
+              +---> if chats.length === 0
+              |     +---> <WelcomeScreen />
+              |     |     |
+              |     |     +---> <InputForm hasHistory={false} />
+              |     |
+              |     +---> handleSubmit() -> POST /backend/agent/{agentURL}
+              |     |     |
+              |     |     +---> receive streaming events
+              |     |     |
+              |     |     +---> navigate('/c/{conversation_id}')
+              |
+              +---> else (has chats)
+                    +---> <ChatMessagesView />
+                    |     |
+                    |     +---> <ScrollArea>
+                    |     |     |
+                    |     |     +---> map messages
+                    |     |     |     |
+                    |     |     |     +---> <UserMessageBubble />
+                    |     |     |     |
+                    |     |     |     +---> <AiMessageBubble />
+                    |     |     |           |
+                    |     |     |           +---> <ActivityTimeline />
+                    |     |     |
+                    |     +---> <InputForm hasHistory={true} />
+                    |           |
+                    |           +---> [New Search] button
+                    |                 |
+                    |                 +---> window.location.reload()
+                    |
+                    +---> useEffect(() => fetchConversation())
+                          |
+                          +---> GET /backend/{agentURL}/conversation/{id}
+                                |
+                                +---> setChats(conversation.messages)
+
+=================================
+URL & PAGE STRUCTURE
+=================================
+
+Homepage "/"
+├── Path: /
+├── Component: App.tsx
+├── State: chats = []
+├── Condition: chats.length === 0
+└── Rendered: WelcomeScreen
+    ├── Heading: "Welcome to Build Your Own Agent"
+    ├── InputForm (hasHistory=false)
+    │   ├── Agent Selector
+    │   ├── Model Selector
+    │   ├── Mode Selector
+    │   ├── Text Input
+    │   └── Send Button
+    └── Footer text
+
+Conversation Page "/c/:conversationId"
+├── Path: /c/{number}
+├── Component: App.tsx
+├── State: chats = [messages from API]
+├── Condition: chats.length > 0
+└── Rendered: ChatMessagesView
+    ├── ScrollArea
+    │   └── map chats.map(msg => Bubble)
+    │       ├── UserMessageBubble (right aligned)
+    │       └── AiMessageBubble (left aligned)
+    │           ├── ActivityTimeline (if has activities)
+    │           ├── ThinkingStream (if thinking)
+    │           └── Message content (markdown)
+    │
+    └── InputForm (hasHistory=true)
+        ├── Agent Selector
+        ├── Model Selector
+        ├── Mode Selector
+        ├── Text Input
+        ├── Send Button
+        └── [New Search] button -> window.location.reload()
+
+=================================
+NAVIGATION PATTERNS
+=================================
+
+Pattern 1: Homepage -> Conversation (via Submit)
+┌─────────────────┐
+│  WelcomeScreen  │
+│  URL: /         │
+│  chats = []     │
+└────────┬────────┘
+         │
+         │ user submits query
+         v
+    ┌────────────────────────────────────────┐
+    │ handleSubmit() in App.tsx               │
+    │ 1. add user message to chats            │
+    │ 2. POST /backend/agent/{agentURL}       │
+    │ 3. stream responses                     │
+    │ 4. detect metadata event                │
+    │ 5. navigate('/c/{conversation_id}')     │
+    │ 6. replace history (no back button)     │
+    └────────────────────────────────────────┘
+         │
+         v
+┌────────────────────────┐
+│ Conversation Page      │
+│ URL: /c/{id}           │
+│ chats = [messages...]  │
+│ ChatMessagesView       │
+└────────────────────────┘
+
+Pattern 2: Conversation -> Homepage (via New Search)
+┌────────────────────────┐
+│ Conversation Page      │
+│ URL: /c/{id}           │
+│ ChatMessagesView       │
+│                        │
+│ InputForm (hasHistory) │
+│ [New Search] button    │
+└────────────┬───────────┘
+             │
+             │ click New Search
+             v
+    ┌─────────────────────────┐
+    │ window.location.reload() │
+    │ browser reloads page     │
+    │ URL stays /c/{id}        │
+    │ App re-mounts            │
+    │ chats = [] (fresh start) │
+    │ navigates to /           │
+    └─────────────────────────┘
+             │
+             v
+┌─────────────────┐
+│  WelcomeScreen  │
+│  URL: /         │
+│  chats = []     │
+└─────────────────┘
+
+=================================
+STATE MANAGEMENT
+=================================
+
+App.tsx manages:
+├── chats: ChatMessage[] - all messages
+├── conversationId: string | undefined - from URL
+├── selectedAgent: AgentType - current agent
+├── isLoading: boolean - request in progress
+├── processedEventsTimeline: ProcessedEvent[] - live activities
+├── historicalActivities: { [messageId]: ProcessedEvent[] } - past activities
+├── thinkingContent: string - AI thinking
+└── isThinking: boolean - is currently thinking
+
+Data flows:
+├── conversationId -> from useParams()
+├── selectedAgent -> from localStorage (via useSelectedAgent hook)
+└── chats -> from API response or user input
+
+=================================
+ROUTING DEFINITION
+=================================
+
+Frontend uses React Router v7 (main.tsx):
+
+<BrowserRouter>
+  <Routes>
+    <Route path="/" element={<App />} />
+    <Route path="/c/:conversationId" element={<App />} />
+  </Routes>
+</BrowserRouter>
+
+Same App component handles both routes.
+App.tsx uses:
+  - useParams<{conversationId: string}>()
+  - useNavigate()
+  - useEffect to fetch conversation if conversationId exists
+  - conditional render based on chats.length
+
+=================================
+API ENDPOINTS
+=================================
+
+POST /backend/agent/{agentURL}
+├── Body: { id: number, messages: ChatMessage[] }
+└── Returns: streaming Response with JSON events
+    ├── {stage: 'metadata', conversation_id: number}
+    ├── {stage: 'thinking', response: string}
+    ├── {stage: 'tool_result', tool: string, result: string}
+    ├── {stage: 'content', response: string}
+    └── {stage: 'finalize_answer'}
+
+GET /backend/{agentURL}/conversation/{conversationId}
+├── Query: conversationId (number)
+└── Returns: Conversation {
+    id, created_at, updated_at, title, model, 
+    metadata, messages: ChatMessage[]
+  }
+
+=================================
+KEY HOOKS & UTILITIES
+=================================
+
+React Hooks Used:
+├── useState() - state management
+├── useEffect() - side effects
+├── useRef() - refs for DOM/values
+├── useCallback() - memoized callbacks
+├── useParams() - read URL params
+└── useNavigate() - programmatic navigation
+
+Custom Hook:
+└── useSelectedAgent()
+    └── manages selectedAgent state with localStorage
+
+Utilities:
+├── cn() - classname utility
+├── RoleType enum - user, assistant, tool, system
+├── Conversation interface
+└── ChatMessage interface
+
