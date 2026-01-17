@@ -86,7 +86,14 @@ class LLMService:
                         yield result
 
                 if thinking_chunks:
+                    print('llm thinking:', "".join(thinking_chunks))
+                    
                     span.set_attribute("llm.thinking", "".join(thinking_chunks))
+                if content_chunks:
+                    print('llm content:', "".join(content_chunks))
+                    span.set_attribute("llm.content", "".join(content_chunks))
+                if tool_call_chunks:
+                    span.set_attribute("llm.tool_calls", json.dumps(tool_call_chunks))
 
             except Exception as e:
                 error_msg = f"Ollama client chat error: {e}"
@@ -126,6 +133,7 @@ class LLMService:
                 f"Tracing LLM invocation parameters error: {e}",
                 exc_info=True,
             )
+            span.record_exception(e)
 
     async def _process_stream_event(
         self,
