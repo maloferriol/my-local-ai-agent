@@ -34,15 +34,16 @@ def get_default_db_file():
     if db_url:
         # For SQLite URLs, extract the file path
         if db_url.startswith("sqlite:///"):
-            return db_url[10:]  # Remove 'sqlite:///' prefix
-        elif db_url.startswith("sqlite://"):
             return db_url[9:]  # Remove 'sqlite://' prefix
+        elif db_url.startswith("sqlite://"):
+            return db_url[8:]  # Remove 'sqlite://' prefix
         # For other database types, we'd need different handling
         # For now, fall back to default SQLite file
 
     # Default persistent database for production
     project_root = Path(__file__).resolve().parent.parent.parent
-    databases_dir = project_root / "data"
+    databases_dir = project_root / "data" 
+
     os.makedirs(databases_dir, exist_ok=True)
     return databases_dir / "conversation_data.db"
 
@@ -73,7 +74,17 @@ class DatabaseManager:
 
     @tracer.start_as_current_span("connect_to_db", kind=trace.SpanKind.INTERNAL)
     def connect(self):
+
         try:
+            # try:
+            #     db_path = Path(self.db_file)
+            #     print(f"Path object created: {db_path}")
+            #     db_path.parent.mkdir(parents=True, exist_ok=True)
+            #     print(f"Parent directory ensured: {db_path.parent}")
+            # except Exception as path_err:
+            #     print(f"Error creating parent directory: {path_err}")
+            #     logger.error("Error creating parent directory: %s", path_err)
+
             self.conn = sqlite3.connect(
                 self.db_file,
                 timeout=5.0,
@@ -90,8 +101,15 @@ class DatabaseManager:
                 # Best-effort PRAGMA setup; continue even if not supported
                 pass
             logger.info("Connected to database: %s", self.db_file)
+            print(f"Successfully connected to database at {self.db_file}")
         except sqlite3.Error as e:
             logger.error("Error connecting to database: %s", e)
+            print(f"SQLite Error {e}")
+            raise
+        except Exception as e2:
+            logger.error("Error connecting to database: %s", e2)
+            raise
+
 
     @tracer.start_as_current_span("close_db_connection", kind=trace.SpanKind.INTERNAL)
     def close(self):

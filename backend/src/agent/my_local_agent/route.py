@@ -168,6 +168,11 @@ async def invoke(
         if not user_message:
             raise HTTPException(status_code=400, detail="Query contains no messages.")
 
+        print(f"User message model: {user_message.model}")
+        print(f"User message content: {user_message.content}")
+        print("==========================================================================")
+        print("conversation object:", conversation)
+        
         if conversation.id == 0:
             # Create a new conversation
             conv_manager = ConversationManager.create_new(model=user_message.model)

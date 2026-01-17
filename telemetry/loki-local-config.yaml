@@ -1,5 +1,8 @@
 auth_enabled: false
 
+# This is to run Loki in a single process
+target: all
+
 server:
   http_listen_port: 3100
   grpc_listen_port: 9096
@@ -7,7 +10,7 @@ server:
   grpc_server_max_concurrent_streams: 1000
 
 common:
-  instance_addr: 127.0.0.1
+  instance_addr: loki
   path_prefix: /tmp/loki
   storage:
     filesystem:
@@ -15,6 +18,7 @@ common:
       rules_directory: /tmp/loki/rules
   replication_factor: 1
   ring:
+    instance_addr: loki
     kvstore:
       store: inmemory
 
@@ -28,6 +32,31 @@ query_range:
 limits_config:
   metric_aggregation_enabled: true
 
+# compactor:
+#   compaction_interval: 2h # or 1h
+
+# query_scheduler:
+#   use_scheduler_ring: false
+
+# frontend:
+#   scheduler_address: ""
+
+# ingester:
+#   lifecycler:
+#     min_ready_duration: 0s
+#   chunk_idle_period: 5m
+#   chunk_retain_period: 30s
+
+# distributor:
+#   ring:
+#     heartbeat_timeout: 10s
+#     heartbeat_period: 5s
+
+# compactor:
+#   working_directory: /tmp/loki/compactor
+#   shared_store: filesystem
+#   compaction_interval: 10m
+
 schema_config:
   configs:
     - from: 2020-10-24
@@ -37,27 +66,3 @@ schema_config:
       index:
         prefix: index_
         period: 24h
-
-pattern_ingester:
-  enabled: true
-  metric_aggregation:
-    loki_address: localhost:3100
-
-ruler:
-  alertmanager_url: http://localhost:9093
-
-frontend:
-  encoding: protobuf
-
-# By default, Loki will send anonymous, but uniquely-identifiable usage and configuration
-# analytics to Grafana Labs. These statistics are sent to https://stats.grafana.org/
-#
-# Statistics help us better understand how Loki is used, and they show us performance
-# levels for most users. This helps us prioritize features and documentation.
-# For more information on what's sent, look at
-# https://github.com/grafana/loki/blob/main/pkg/analytics/stats.go
-# Refer to the buildReport method to see what goes into a report.
-#
-# If you would like to disable reporting, uncomment the following lines:
-#analytics:
-#  reporting_enabled: false
