@@ -1,10 +1,11 @@
 import type React from "react";
 import { RoleType, type ChatMessage } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Copy, CopyCheck } from "lucide-react";
+import { Loader2, Copy, CopyCheck, ChevronLeft } from "lucide-react";
 import { InputForm } from "@/components/InputForm";
 import { Button } from "@/components/ui/button";
 import { useState, ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -261,6 +262,7 @@ interface ChatMessagesViewProps {
   agentControl: SelectedAgentParams;
   thinkingContent?: string;
   isThinking?: boolean;
+  onNavigateHome?: () => void;
 }
 
 export function ChatMessagesView({
@@ -274,8 +276,10 @@ export function ChatMessagesView({
   agentControl,
   thinkingContent = "",
   isThinking = false,
+  onNavigateHome,
 }: ChatMessagesViewProps) {
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const handleCopy = async (text: string, messageId: string) => {
     try {
@@ -287,8 +291,29 @@ export function ChatMessagesView({
     }
   };
 
+  const handleBackToHome = () => {
+    if (onNavigateHome) {
+      onNavigateHome();
+    }
+    navigate("/");
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {/* Back to Home Button Header */}
+      <div className="flex items-center px-4 md:px-6 py-4 border-b border-neutral-700 bg-neutral-800">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleBackToHome}
+          className="text-neutral-300 hover:text-neutral-100 hover:bg-neutral-700 transition-colors"
+          title="Back to home"
+        >
+          <ChevronLeft className="h-5 w-5 mr-1" />
+          Home
+        </Button>
+      </div>
+
       <ScrollArea className="flex-1 min-h-0" ref={scrollAreaRef}>
         <div className="p-4 md:p-6 pb-2 space-y-2 max-w-4xl mx-auto">
           {messages.map((message, index) => {
