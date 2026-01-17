@@ -9,7 +9,8 @@
       "Bash(black:*)",
       "Bash(PYTHONTRACEMALLOC=1 python -m pytest:*)",
       "Bash(claude doctor)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []
