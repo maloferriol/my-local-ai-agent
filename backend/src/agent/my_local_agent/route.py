@@ -75,6 +75,36 @@ app = FastAPI(
 )
 
 
+@app.get("/conversations")
+@tracer.start_as_current_span(name="get_conversations_list", kind=SpanKind.INTERNAL)
+async def get_conversations_list(limit: int = 20, offset: int = 0):
+    """
+    Fetch a paginated list of conversations.
+
+    Args:
+        limit: Maximum number of conversations to return (default 20).
+        offset: Number of conversations to skip (default 0).
+
+    Returns:
+        A list of conversation summaries with pagination info.
+    """
+    try:
+        with DatabaseManager() as db:
+            conversations = db.get_conversations(limit=limit, offset=offset)
+
+            # Enhance each conversation with message count
+            for conv in conversations:
+                conv['message_count'] = db.get_message_count(conv['id'])
+
+            return {
+                "conversations": conversations,
+                "total": len(conversations),
+            }
+    except Exception as e:
+        logger.error(f"Error fetching conversations list: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch conversations")
+
+
 @app.get("/conversation/{conversation_id}", response_model=Conversation)
 @tracer.start_as_current_span(name="get_conversation", kind=SpanKind.INTERNAL)
 async def get_conversation(
