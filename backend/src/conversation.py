@@ -77,6 +77,7 @@ class ConversationManager:
         )
 
         with DatabaseManager() as db:
+            print("Creating new conversation in DB:", db)            
             conversation_id = db.create_conversation(
                 title=title,
                 model_name=model,

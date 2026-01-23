@@ -87,7 +87,7 @@ class LLMService:
 
                 if thinking_chunks:
                     print('llm thinking:', "".join(thinking_chunks))
-                    
+
                     span.set_attribute("llm.thinking", "".join(thinking_chunks))
                 if content_chunks:
                     print('llm content:', "".join(content_chunks))
@@ -126,8 +126,7 @@ class LLMService:
                     }
                 ),
             )
-            # Consider truncating or hashing messages if large/PII-sensitive
-            span.set_attribute("llm.input_messages", messages)
+            span.set_attribute("llm.input_messages", json.dumps(messages))
         except Exception as e:
             logger.error(
                 f"Tracing LLM invocation parameters error: {e}",
